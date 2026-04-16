@@ -89,3 +89,18 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+@layer components {
+  .step-indicator {
+    @apply flex items-center justify-center w-8 h-8 rounded-full text-sm font-semibold transition-all duration-300;
+  }
+  .step-indicator-active {
+    @apply bg-primary text-primary-foreground;
+  }
+  .step-indicator-complete {
+    @apply bg-accent text-accent-foreground;
+  }
+  .step-indicator-pending {
+    @apply bg-muted text-muted-foreground;
+  }
+}
