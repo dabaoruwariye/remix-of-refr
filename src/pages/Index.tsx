@@ -11,22 +11,27 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card">
+      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container flex h-16 items-center justify-between">
           <button
             onClick={() => setView("select")}
             className="text-xl font-bold tracking-tight text-foreground"
           >
-            <span className="text-accent">●</span> RefLink
+            Refr
           </button>
-          {view !== "select" && (
-            <button
-              onClick={() => setView("select")}
-              className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-            >
-              ← Back
+          <div className="flex items-center gap-6">
+            {view !== "select" && (
+              <button
+                onClick={() => setView("select")}
+                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+              >
+                ← Back
+              </button>
+            )}
+            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+              Log in
             </button>
-          )}
+          </div>
         </div>
       </header>
 
