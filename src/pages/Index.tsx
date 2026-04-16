@@ -10,12 +10,12 @@ const Index = () => {
   const [view, setView] = useState<View>("select");
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border bg-card/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container flex h-16 items-center justify-between">
+    <div className="min-h-screen bg-background text-foreground">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border/50">
+        <div className="container flex h-12 items-center justify-between">
           <button
             onClick={() => setView("select")}
-            className="text-xl font-bold tracking-tight text-foreground"
+            className="text-lg font-semibold tracking-tight text-foreground"
           >
             Refr
           </button>
@@ -23,53 +23,55 @@ const Index = () => {
             {view !== "select" && (
               <button
                 onClick={() => setView("select")}
-                className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
               >
                 ← Back
               </button>
             )}
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <button className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
               Log in
             </button>
           </div>
         </div>
       </header>
 
-      <AnimatePresence mode="wait">
-        {view === "select" && (
-          <motion.div
-            key="select"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3 }}
-          >
-            <RoleSelection onSelect={setView} />
-          </motion.div>
-        )}
-        {view === "looker" && (
-          <motion.div
-            key="looker"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3 }}
-          >
-            <LookerProfileForm />
-          </motion.div>
-        )}
-        {view === "referrer" && (
-          <motion.div
-            key="referrer"
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -12 }}
-            transition={{ duration: 0.3 }}
-          >
-            <ReferrerDashboard />
-          </motion.div>
-        )}
-      </AnimatePresence>
+      <div className="pt-12">
+        <AnimatePresence mode="wait">
+          {view === "select" && (
+            <motion.div
+              key="select"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <RoleSelection onSelect={setView} />
+            </motion.div>
+          )}
+          {view === "looker" && (
+            <motion.div
+              key="looker"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <LookerProfileForm />
+            </motion.div>
+          )}
+          {view === "referrer" && (
+            <motion.div
+              key="referrer"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <ReferrerDashboard />
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
     </div>
   );
 };

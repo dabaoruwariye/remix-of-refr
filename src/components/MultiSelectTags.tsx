@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { X } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 
 interface MultiSelectTagsProps {
@@ -30,17 +29,16 @@ const MultiSelectTags = ({ label, options, selected, onChange, placeholder }: Mu
   return (
     <div className="space-y-2">
       <label className="text-sm font-medium text-foreground">{label}</label>
-      <div className="flex flex-wrap gap-2 mb-2">
+      <div className="flex flex-wrap gap-1.5 mb-2">
         {selected.map((tag) => (
-          <Badge
+          <button
             key={tag}
-            variant="secondary"
-            className="gap-1 pr-1 cursor-pointer hover:bg-destructive/10"
             onClick={() => remove(tag)}
+            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full bg-accent/10 text-accent border border-accent/20 hover:bg-accent/20 transition-colors"
           >
             {tag}
             <X className="w-3 h-3" />
-          </Badge>
+          </button>
         ))}
       </div>
       <div className="relative">
@@ -50,12 +48,12 @@ const MultiSelectTags = ({ label, options, selected, onChange, placeholder }: Mu
           placeholder={placeholder || "Search..."}
         />
         {search && filtered.length > 0 && (
-          <div className="absolute z-10 mt-1 w-full bg-card border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+          <div className="absolute z-10 mt-1 w-full bg-popover border border-border rounded-xl shadow-2xl max-h-40 overflow-y-auto">
             {filtered.map((o) => (
               <button
                 key={o}
                 onClick={() => add(o)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors"
+                className="w-full text-left px-3 py-2.5 text-sm text-foreground hover:bg-muted transition-colors first:rounded-t-xl last:rounded-b-xl"
               >
                 {o}
               </button>
