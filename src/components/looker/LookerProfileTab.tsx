@@ -83,6 +83,26 @@ const LookerProfileTab = () => {
     load();
   }, [user?.id]);
 
+  const savePrefs = async () => {
+    setEditingPrefs(false);
+    if (!user) return;
+    await supabase.from("looker_profiles")
+      .update({
+        target_role: prefs.targetRole || null,
+        seniority: prefs.seniority || null,
+        industries: prefs.industries,
+      })
+      .eq("user_id", user.id);
+  };
+
+  const saveVisible = async (v: boolean) => {
+    setVisible(v);
+    if (!user) return;
+    await supabase.from("looker_profiles")
+      .update({ visible: v })
+      .eq("user_id", user.id);
+  };
+
   const openSettings = () => {
     setDraftAccount(account);
     setDraftPassword({ current: "", next: "", confirm: "" });
@@ -114,7 +134,7 @@ const LookerProfileTab = () => {
     <div className="space-y-4">
       {/* Visibility */}
       <div className="glass-card p-5 flex items-start gap-4">
-        <Switch checked={visible} onCheckedChange={setVisible} className="mt-0.5" />
+        <Switch checked={visible} onCheckedChange={saveVisible} className="mt-0.5" />
         <div>
           <p className="text-sm font-medium text-foreground">Visible to referrers who know me</p>
           <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
@@ -175,7 +195,7 @@ const LookerProfileTab = () => {
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Preferences</h3>
           {editingPrefs ? (
-            <button onClick={() => setEditingPrefs(false)} className="p-1.5 rounded-lg hover:bg-muted">
+            <button onClick={savePrefs} className="p-1.5 rounded-lg hover:bg-muted">
               <Check className="w-4 h-4 text-success" />
             </button>
           ) : (

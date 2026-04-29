@@ -3,20 +3,24 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { ArrowRight, ArrowLeft, Download } from "lucide-react";
 import OnboardingProgress from "./OnboardingProgress";
+import MultiSelectDropdown from "./MultiSelectDropdown";
 import ResumeUpload from "./ResumeUpload";
 import ExperienceCard, { type Position, type Education } from "./shared/ExperienceCard";
 import { useAuth } from "@/context/AuthContext";
 import { uploadResume, parsedToPositions, parsedToEducation } from "@/lib/resume";
+import { supabase } from "@/lib/supabase";
+import { INDUSTRIES } from "@/lib/refrConstants";
 
-const STEPS = ["Account", "Experience", "Extension"];
+const STEPS = ["Account", "Experience", "Preferences", "Extension"];
 const TOTAL = STEPS.length;
 
 const ReferrerDashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup } = useAuth();
+  const { signup, user } = useAuth();
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -31,6 +35,8 @@ const ReferrerDashboard = () => {
     resume: null as File | null,
     positions: [] as Position[],
     education: [] as Education[],
+    industries: [] as string[],
+    networkDescription: "",
   });
 
   const update = (field: string, value: unknown) =>
@@ -64,6 +70,26 @@ const ReferrerDashboard = () => {
         setStep(2);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Signup failed. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Step 3 → save preferences before advancing to extension step
+    if (step === 3) {
+      setSubmitting(true);
+      try {
+        const { error: prefErr } = await supabase.from("referrer_profiles")
+          .update({
+            industries: form.industries,
+            network_description: form.networkDescription || null,
+          })
+          .eq("user_id", user?.id);
+        if (prefErr) throw prefErr;
+        setStep(4);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save preferences. Please try again.");
       } finally {
         setSubmitting(false);
       }
@@ -159,9 +185,40 @@ const ReferrerDashboard = () => {
             </motion.div>
           )}
 
-          {/* Step 3 — Extension */}
+          {/* Step 3 — Preferences */}
           {step === 3 && (
             <motion.div key="r3" {...slide} className="space-y-6">
+              <div>
+                <h2 className="text-2xl font-semibold text-foreground mb-1">Your network</h2>
+                <p className="text-sm text-muted-foreground">Help us understand who you know and where you work.</p>
+              </div>
+              <div className="space-y-4">
+                <MultiSelectDropdown
+                  label="Industries"
+                  helper="Industries where you have a strong network."
+                  options={INDUSTRIES}
+                  selected={form.industries}
+                  onChange={(v) => update("industries", v)}
+                  placeholder="Select industries"
+                />
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Network description</label>
+                  <Textarea
+                    value={form.networkDescription}
+                    onChange={(e) => update("networkDescription", e.target.value)}
+                    placeholder="e.g. mostly operators and PMs from early stage startups."
+                    className="min-h-[90px] resize-none"
+                  />
+                  <p className="text-xs text-muted-foreground">Optional. Helps calibrate which roles the extension surfaces.</p>
+                </div>
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+            </motion.div>
+          )}
+
+          {/* Step 4 — Extension */}
+          {step === 4 && (
+            <motion.div key="r4" {...slide} className="space-y-6">
               <div>
                 <h2 className="text-2xl font-semibold text-foreground mb-1">One last step.</h2>
                 <p className="text-lg text-muted-foreground font-light mb-2">
@@ -203,7 +260,7 @@ const ReferrerDashboard = () => {
             className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90"
           >
             {submitting
-              ? "Creating account…"
+              ? step === 1 ? "Creating account…" : "Saving…"
               : step === TOTAL
               ? "Go to dashboard"
               : "Continue"}

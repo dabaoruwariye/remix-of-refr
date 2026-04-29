@@ -68,3 +68,96 @@ $$;
 -- - anon: fallback when email confirmation is enabled and session isn't issued yet
 grant execute on function public.create_user_profile(uuid, text, text, text, uuid)
   to authenticated, anon;
+
+-- ============================================================
+-- get_user_histories
+-- Returns raw work_history and education rows for two users.
+-- SECURITY DEFINER so a referrer can fetch a looker's records
+-- without needing cross-user RLS policies.
+-- ============================================================
+create or replace function public.get_user_histories(
+  p_user_id_a uuid,
+  p_user_id_b uuid
+)
+returns jsonb
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select jsonb_build_object(
+    'user_a_work', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'company_name', company_name,
+        'start_date',   start_date,
+        'end_date',     end_date
+      ))
+      from work_history where user_id = p_user_id_a
+    ), '[]'::jsonb),
+    'user_b_work', coalesce((
+      select jsonb_agg(jsonb_build_object(
+        'company_name', company_name,
+        'start_date',   start_date,
+        'end_date',     end_date
+      ))
+      from work_history where user_id = p_user_id_b
+    ), '[]'::jsonb),
+    'user_a_edu', coalesce((
+      select jsonb_agg(jsonb_build_object('school_name', school_name))
+      from education where user_id = p_user_id_a
+    ), '[]'::jsonb),
+    'user_b_edu', coalesce((
+      select jsonb_agg(jsonb_build_object('school_name', school_name))
+      from education where user_id = p_user_id_b
+    ), '[]'::jsonb)
+  )
+$$;
+
+grant execute on function public.get_user_histories(uuid, uuid) to authenticated;
+
+-- ============================================================
+-- get_referrer_lookers
+-- Returns all confirmed-connection lookers for a referrer,
+-- with their looker_profile, name, and most recent work entry.
+-- SECURITY DEFINER for the same cross-user RLS reason.
+-- ============================================================
+create or replace function public.get_referrer_lookers(p_referrer_id uuid)
+returns jsonb
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(jsonb_agg(row_data), '[]'::jsonb)
+  from (
+    select jsonb_build_object(
+      'looker_id',   r.looker_id,
+      'name',        u.name,
+      'email',       u.email,
+      'profile', jsonb_build_object(
+        'user_id',     lp.user_id,
+        'target_role', lp.target_role,
+        'seniority',   lp.seniority,
+        'industries',  to_jsonb(coalesce(lp.industries, '{}'::text[])),
+        'visible',     lp.visible
+      ),
+      'recent_work', (
+        select to_jsonb(w)
+        from (
+          select company_name, job_title, start_date, end_date, description
+          from work_history
+          where user_id = r.looker_id
+          order by start_date desc nulls last
+          limit 1
+        ) w
+      )
+    ) as row_data
+    from relationships r
+    join users u on u.id = r.looker_id
+    left join looker_profiles lp on lp.user_id = r.looker_id
+    where r.referrer_id = p_referrer_id
+      and r.confirmed_by_looker = true
+  ) t
+$$;
+
+grant execute on function public.get_referrer_lookers(uuid) to authenticated;

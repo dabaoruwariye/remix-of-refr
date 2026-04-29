@@ -22,6 +22,22 @@ const ProfileTab = () => {
 
   const extensionInstalled = false;
 
+  const saveIndustries = async () => {
+    setEditingIndustries(false);
+    if (!user) return;
+    await supabase.from("referrer_profiles")
+      .update({ industries })
+      .eq("user_id", user.id);
+  };
+
+  const saveNetworkDesc = async () => {
+    setEditingNetwork(false);
+    if (!user) return;
+    await supabase.from("referrer_profiles")
+      .update({ network_description: networkDesc || null })
+      .eq("user_id", user.id);
+  };
+
   useEffect(() => {
     if (!user) return;
 
@@ -96,7 +112,7 @@ const ProfileTab = () => {
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Industries</h3>
             <p className="text-xs text-muted-foreground mt-1">Used to surface relevant opportunities through the extension.</p>
           </div>
-          <button onClick={() => setEditingIndustries((v) => !v)} className="p-1.5 rounded-lg hover:bg-muted">
+          <button onClick={editingIndustries ? saveIndustries : () => setEditingIndustries(true)} className="p-1.5 rounded-lg hover:bg-muted">
             {editingIndustries
               ? <Check className="w-4 h-4 text-success" />
               : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
@@ -124,7 +140,7 @@ const ProfileTab = () => {
             <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Network description</h3>
             <p className="text-xs text-muted-foreground mt-1">How would you describe the people in your network?</p>
           </div>
-          <button onClick={() => setEditingNetwork((v) => !v)} className="p-1.5 rounded-lg hover:bg-muted">
+          <button onClick={editingNetwork ? saveNetworkDesc : () => setEditingNetwork(true)} className="p-1.5 rounded-lg hover:bg-muted">
             {editingNetwork
               ? <Check className="w-4 h-4 text-success" />
               : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}

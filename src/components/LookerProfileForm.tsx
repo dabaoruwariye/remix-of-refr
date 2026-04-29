@@ -12,6 +12,7 @@ import ResumeUpload from "./ResumeUpload";
 import ExperienceCard, { type Position, type Education } from "./shared/ExperienceCard";
 import { useAuth } from "@/context/AuthContext";
 import { uploadResume, parsedToPositions, parsedToEducation } from "@/lib/resume";
+import { supabase } from "@/lib/supabase";
 
 const INDUSTRIES = [
   "Technology", "Healthcare", "Finance", "Education", "Consumer",
@@ -30,7 +31,7 @@ const TOTAL = STEPS.length;
 const LookerProfileForm = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { signup } = useAuth();
+  const { signup, user } = useAuth();
 
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
@@ -86,8 +87,39 @@ const LookerProfileForm = () => {
       return;
     }
 
-    // Last step → just navigate (account + profile already created at step 1)
+    // Step 3 → save preferences before advancing to step 4
+    if (step === 3) {
+      setSubmitting(true);
+      try {
+        const { error: prefErr } = await supabase.from("looker_profiles")
+          .update({
+            target_role: form.targetRole || null,
+            seniority: form.seniority || null,
+            industries: form.industries,
+          })
+          .eq("user_id", user?.id);
+        if (prefErr) throw prefErr;
+        setStep(4);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to save preferences. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    // Last step → save visibility then navigate
     if (step === TOTAL) {
+      setSubmitting(true);
+      try {
+        await supabase.from("looker_profiles")
+          .update({ visible: form.visible })
+          .eq("user_id", user?.id);
+      } catch {
+        // non-critical; proceed anyway
+      } finally {
+        setSubmitting(false);
+      }
       navigate("/looker-dashboard");
       return;
     }
@@ -260,7 +292,7 @@ const LookerProfileForm = () => {
             className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90"
           >
             {submitting
-              ? "Creating account…"
+              ? step === 1 ? "Creating account…" : "Saving…"
               : step === TOTAL
               ? "Go to dashboard"
               : "Continue"}
