@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, Send } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ChevronDown, Send, Download } from "lucide-react";
 
 interface Referral {
   id: string;
@@ -10,7 +11,11 @@ interface Referral {
   roleTitle: string;
   dateSent: string;
   status: "sent" | "in_process" | "hired" | "not_progressed";
+  relationshipContext: string;
+  vouchText: string;
+  hiringManagerEmail: string;
   emailBody: string;
+  potentialPayout?: string;
 }
 
 const STATUS_STYLES: Record<Referral["status"], string> = {
@@ -28,27 +33,57 @@ const STATUS_LABELS: Record<Referral["status"], string> = {
 };
 
 const MOCK_REFERRALS: Referral[] = [
-  { id: "1", lookerName: "Sarah Chen", company: "Anthropic", roleTitle: "VP of Product", dateSent: "Apr 10, 2026", status: "in_process", emailBody: "Hi Jordan — I wanted to introduce you to Sarah Chen. Sarah was my PM lead at Stripe where she shipped the Billing v3 platform. She's deeply technical, incredibly organized, and has a rare ability to align engineering and business goals. I think she'd be a phenomenal fit for the VP Product role. Happy to share more context anytime." },
-  { id: "2", lookerName: "Marcus Johnson", company: "Linear", roleTitle: "Engineering Director", dateSent: "Apr 7, 2026", status: "sent", emailBody: "Hi team — Marcus Johnson is one of the strongest engineering leaders I've worked with. He led a 40-person org at Meta focused on developer tools and consistently shipped ahead of schedule. He's looking for a director-level role at a product-led company and I immediately thought of Linear. Would love to connect you two." },
-  { id: "3", lookerName: "David Park", company: "Notion", roleTitle: "Head of Growth", dateSent: "Mar 28, 2026", status: "hired", emailBody: "Hi Alex — David Park is someone I've admired in the growth community for years. He scaled Notion's PLG motion from Series A to C and has deep expertise in B2B SaaS acquisition. He's exploring his next chapter and I think he'd be a great addition to your leadership team." },
-  { id: "4", lookerName: "Aisha Patel", company: "OpenAI", roleTitle: "ML Engineering Lead", dateSent: "Mar 15, 2026", status: "not_progressed", emailBody: "Hi hiring team — I'd like to recommend Aisha Patel for the ML Engineering Lead position. Aisha built the personalization ML pipeline at Airbnb that improved conversion by 12%. She's deeply skilled in recommendation systems and production ML infrastructure." },
+  { id: "1", lookerName: "Sarah Chen", company: "Anthropic", roleTitle: "VP of Product", dateSent: "Apr 10, 2026", status: "in_process",
+    relationshipContext: "Worked together at Stripe (2019–2022)",
+    vouchText: "Sarah is the most rigorous PM I've worked with. She'd thrive in a research-heavy product org.",
+    hiringManagerEmail: "jordan@anthropic.com",
+    emailBody: "Hi Jordan — I wanted to introduce you to Sarah Chen. Sarah was my PM lead at Stripe where she shipped the Billing v3 platform. She's deeply technical, incredibly organized, and has a rare ability to align engineering and business goals. I think she'd be a phenomenal fit for the VP Product role. Happy to share more context anytime." },
+  { id: "2", lookerName: "Marcus Johnson", company: "Linear", roleTitle: "Engineering Director", dateSent: "Apr 7, 2026", status: "sent",
+    relationshipContext: "Same school — Stanford CS '14",
+    vouchText: "Marcus is the rare engineering leader who is both deeply technical and an exceptional people manager.",
+    hiringManagerEmail: "hiring@linear.app",
+    emailBody: "Hi team — Marcus Johnson is one of the strongest engineering leaders I've worked with. He led a 40-person org at Meta focused on developer tools and consistently shipped ahead of schedule. He's looking for a director-level role at a product-led company and I immediately thought of Linear. Would love to connect you two." },
+  { id: "3", lookerName: "David Park", company: "Notion", roleTitle: "Head of Growth", dateSent: "Mar 28, 2026", status: "hired",
+    relationshipContext: "Professional community — On Deck Founders",
+    vouchText: "David is a generational growth talent. He sees PLG patterns most operators miss.",
+    hiringManagerEmail: "alex@notion.so",
+    emailBody: "Hi Alex — David Park is someone I've admired in the growth community for years. He scaled Notion's PLG motion from Series A to C and has deep expertise in B2B SaaS acquisition. He's exploring his next chapter and I think he'd be a great addition to your leadership team.",
+    potentialPayout: "$2,400" },
+  { id: "4", lookerName: "Aisha Patel", company: "OpenAI", roleTitle: "ML Engineering Lead", dateSent: "Mar 15, 2026", status: "not_progressed",
+    relationshipContext: "Worked together at Airbnb",
+    vouchText: "Aisha shipped the personalization ML pipeline that defines Airbnb's recommendations today.",
+    hiringManagerEmail: "talent@openai.com",
+    emailBody: "Hi hiring team — I'd like to recommend Aisha Patel for the ML Engineering Lead position. Aisha built the personalization ML pipeline at Airbnb that improved conversion by 12%. She's deeply skilled in recommendation systems and production ML infrastructure." },
 ];
+
+const REFERRALS_REMAINING = 3;
+const RESET_DATE = "May 1, 2026";
 
 const ReferralsTab = () => {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
   if (MOCK_REFERRALS.length === 0) {
     return (
-      <div className="glass-card p-12 text-center">
-        <Send className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
-        <h3 className="text-lg font-semibold text-foreground mb-2">No referrals sent yet.</h3>
-        <p className="text-sm text-muted-foreground">Browse LinkedIn with the Refr extension to spot opportunities.</p>
+      <div className="space-y-4">
+        <RemainingBanner />
+        <div className="glass-card p-12 text-center">
+          <Send className="w-10 h-10 text-muted-foreground mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">No referrals sent yet.</h3>
+          <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
+            Install the Refr Chrome extension and browse LinkedIn like you normally would — we'll surface people you can refer when we spot the right opportunity.
+          </p>
+          <Button className="rounded-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90">
+            <Download className="w-4 h-4" /> Download the extension
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="glass-card overflow-hidden">
+    <div className="space-y-4">
+      <RemainingBanner />
+      <div className="glass-card overflow-hidden">
       {/* Header */}
       <div className="grid grid-cols-[1.5fr_1fr_1fr_0.8fr_0.8fr_40px] gap-4 px-6 py-3 border-b border-border/50 text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
         <span>Looker</span>
@@ -85,17 +120,48 @@ const ReferralsTab = () => {
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="px-6 pb-5 pt-1">
+                <div className="px-6 pb-5 pt-1 space-y-3">
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Relationship context</p>
+                    <p className="text-sm text-foreground/80">{referral.relationshipContext}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">Your vouch</p>
+                    <p className="text-sm text-foreground/80 italic">"{referral.vouchText}"</p>
+                  </div>
                   <div className="bg-muted/40 rounded-xl p-4 border border-border/30">
-                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">Email sent</p>
+                    <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
+                      Sent to {referral.hiringManagerEmail}
+                    </p>
                     <p className="text-sm text-foreground/80 leading-relaxed">{referral.emailBody}</p>
                   </div>
+                  {referral.status === "hired" && referral.potentialPayout && (
+                    <p className="text-xs text-muted-foreground">
+                      Potential earnings: <span className="text-foreground font-medium">{referral.potentialPayout}</span> pending confirmation.
+                    </p>
+                  )}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
       ))}
+      </div>
+    </div>
+  );
+};
+
+const RemainingBanner = () => {
+  if (REFERRALS_REMAINING === 0) {
+    return (
+      <div className="inline-flex items-center px-3 py-1.5 rounded-full bg-muted text-xs text-muted-foreground border border-border/50">
+        Monthly referral limit reached. Resets on {RESET_DATE}.
+      </div>
+    );
+  }
+  return (
+    <div className="inline-flex items-center px-3 py-1.5 rounded-full bg-accent/10 text-xs text-accent border border-accent/20">
+      You have {REFERRALS_REMAINING} referrals remaining this month.
     </div>
   );
 };
