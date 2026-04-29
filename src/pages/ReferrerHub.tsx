@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { useNavigate } from "react-router-dom";
-import { Send, DollarSign, Users, User } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Briefcase, Send, DollarSign, Users, User } from "lucide-react";
+import OpportunitiesTab from "@/components/referrer/OpportunitiesTab";
 import NetworkTab from "@/components/referrer/NetworkTab";
 import ReferralsTab from "@/components/referrer/ReferralsTab";
 import EarningsTab from "@/components/referrer/EarningsTab";
@@ -9,6 +10,7 @@ import ProfileTab from "@/components/referrer/ProfileTab";
 import { useAuth } from "@/context/AuthContext";
 
 const TABS = [
+  { id: "opportunities", label: "Opportunities", icon: Briefcase },
   { id: "referrals", label: "Referrals", icon: Send },
   { id: "earnings", label: "Earnings", icon: DollarSign },
   { id: "network", label: "Network", icon: Users },
@@ -18,9 +20,14 @@ const TABS = [
 type TabId = (typeof TABS)[number]["id"];
 
 const ReferrerHub = () => {
-  const [activeTab, setActiveTab] = useState<TabId>("referrals");
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { logout } = useAuth();
+
+  const paramTab = searchParams.get("tab") as TabId | null;
+  const [activeTab, setActiveTab] = useState<TabId>(
+    paramTab && TABS.some((t) => t.id === paramTab) ? paramTab : "opportunities",
+  );
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -68,9 +75,10 @@ const ReferrerHub = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          {activeTab === "network" && <NetworkTab />}
+          {activeTab === "opportunities" && <OpportunitiesTab />}
           {activeTab === "referrals" && <ReferralsTab />}
           {activeTab === "earnings" && <EarningsTab />}
+          {activeTab === "network" && <NetworkTab />}
           {activeTab === "profile" && <ProfileTab />}
         </motion.div>
       </main>

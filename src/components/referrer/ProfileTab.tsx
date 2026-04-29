@@ -8,6 +8,8 @@ import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { INDUSTRIES } from "@/lib/refrConstants";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
+import { JOBS_CACHE_PREFIX } from "@/lib/jobs";
+import { type Position, type Education } from "@/components/shared/ExperienceCard";
 
 const ProfileTab = () => {
   const { user } = useAuth();
@@ -21,6 +23,50 @@ const ProfileTab = () => {
   const [editingNetwork, setEditingNetwork] = useState(false);
 
   const extensionInstalled = false;
+
+  const invalidateJobsCache = () => {
+    if (!user) return;
+    try { localStorage.removeItem(JOBS_CACHE_PREFIX + user.id); } catch { /* ignore */ }
+  };
+
+  const savePosition = (pos: Position) => {
+    if (!user) return;
+    invalidateJobsCache();
+    supabase.from("work_history").upsert({
+      id: pos.id,
+      user_id: user.id,
+      company_name: pos.company || null,
+      job_title: pos.title || null,
+      start_date: pos.startDate || null,
+      end_date: pos.endDate && pos.endDate.toLowerCase() !== "present" ? pos.endDate : null,
+      description: pos.description || null,
+    }).then(({ error }) => { if (error) console.error("work_history upsert:", error); });
+  };
+
+  const deletePosition = (id: string) => {
+    if (!user) return;
+    invalidateJobsCache();
+    supabase.from("work_history").delete().eq("id", id)
+      .then(({ error }) => { if (error) console.error("work_history delete:", error); });
+  };
+
+  const saveEducation = (edu: Education) => {
+    if (!user) return;
+    supabase.from("education").upsert({
+      id: edu.id,
+      user_id: user.id,
+      school_name: edu.school || null,
+      degree_type: edu.degree || null,
+      field_of_study: edu.field || null,
+      graduation_year: edu.graduationYear || null,
+    }).then(({ error }) => { if (error) console.error("education upsert:", error); });
+  };
+
+  const deleteEducation = (id: string) => {
+    if (!user) return;
+    supabase.from("education").delete().eq("id", id)
+      .then(({ error }) => { if (error) console.error("education delete:", error); });
+  };
 
   const saveIndustries = async () => {
     setEditingIndustries(false);
@@ -103,6 +149,10 @@ const ProfileTab = () => {
         education={education}
         setEducation={setEducation}
         resumeNote="Your resume is used to find meaningful overlaps with lookers — shared employers, shared schools."
+        onSavePosition={savePosition}
+        onDeletePosition={deletePosition}
+        onSaveEducation={saveEducation}
+        onDeleteEducation={deleteEducation}
       />
 
       {/* Industries */}

@@ -29,6 +29,11 @@ interface ExperienceCardProps {
   education: Education[];
   setEducation: (e: Education[]) => void;
   resumeNote?: string;
+  // Optional persistence hooks — undefined means no-op (used in onboarding)
+  onSavePosition?: (p: Position) => void;
+  onDeletePosition?: (id: string) => void;
+  onSaveEducation?: (e: Education) => void;
+  onDeleteEducation?: (id: string) => void;
 }
 
 const newPosition = (): Position => ({
@@ -41,6 +46,7 @@ const newEducation = (): Education => ({
 const ExperienceCard = ({
   resumeFile, onResumeChange, positions, setPositions, education, setEducation,
   resumeNote = "Your resume populated the fields below. You can edit anything directly.",
+  onSavePosition, onDeletePosition, onSaveEducation, onDeleteEducation,
 }: ExperienceCardProps) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [editingPos, setEditingPos] = useState<string | null>(null);
@@ -125,10 +131,23 @@ const ExperienceCard = ({
                   </div>
                   <Textarea value={p.description} onChange={(e) => updatePos(p.id, { description: e.target.value })} placeholder="Description" className="min-h-[70px] resize-none" />
                   <div className="flex justify-between">
-                    <button onClick={() => removePos(p.id)} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        onDeletePosition?.(p.id);
+                        removePos(p.id);
+                        setEditingPos(null);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1"
+                    >
                       <Trash2 className="w-3 h-3" /> Remove
                     </button>
-                    <button onClick={() => setEditingPos(null)} className="text-xs text-accent flex items-center gap-1 hover:underline">
+                    <button
+                      onClick={() => {
+                        onSavePosition?.(p);
+                        setEditingPos(null);
+                      }}
+                      className="text-xs text-accent flex items-center gap-1 hover:underline"
+                    >
                       <Check className="w-3 h-3" /> Done
                     </button>
                   </div>
@@ -180,10 +199,23 @@ const ExperienceCard = ({
                   </div>
                   <Input value={e.graduationYear} onChange={(ev) => updateEdu(e.id, { graduationYear: ev.target.value })} placeholder="Graduation year" />
                   <div className="flex justify-between">
-                    <button onClick={() => removeEdu(e.id)} className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1">
+                    <button
+                      onClick={() => {
+                        onDeleteEducation?.(e.id);
+                        removeEdu(e.id);
+                        setEditingEdu(null);
+                      }}
+                      className="text-xs text-muted-foreground hover:text-destructive flex items-center gap-1"
+                    >
                       <Trash2 className="w-3 h-3" /> Remove
                     </button>
-                    <button onClick={() => setEditingEdu(null)} className="text-xs text-accent flex items-center gap-1 hover:underline">
+                    <button
+                      onClick={() => {
+                        onSaveEducation?.(e);
+                        setEditingEdu(null);
+                      }}
+                      className="text-xs text-accent flex items-center gap-1 hover:underline"
+                    >
                       <Check className="w-3 h-3" /> Done
                     </button>
                   </div>

@@ -71,7 +71,7 @@ export async function matchLookers(
 
   const signal = roleSignal.toLowerCase();
 
-  const scored = (data as Array<{
+  const scored = ((data ?? []) as Array<{
     looker_id: string;
     name: string;
     email: string;
