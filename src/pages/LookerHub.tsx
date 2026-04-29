@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { User, Activity, Users } from "lucide-react";
 import LookerProfileTab from "@/components/looker/LookerProfileTab";
 import LookerActivityTab from "@/components/looker/LookerActivityTab";
@@ -15,6 +16,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 const LookerHub = () => {
   const [activeTab, setActiveTab] = useState<TabId>("profile");
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -46,7 +48,10 @@ const LookerHub = () => {
               );
             })}
           </div>
-          <button className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() => navigate("/login")}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
             Log out
           </button>
         </div>

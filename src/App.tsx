@@ -7,6 +7,7 @@ import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import ReferrerHub from "./pages/ReferrerHub.tsx";
 import LookerHub from "./pages/LookerHub.tsx";
+import Login from "./pages/Login.tsx";
 
 const queryClient = new QueryClient();
 
@@ -18,6 +19,7 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<ReferrerHub />} />
           <Route path="/looker-dashboard" element={<LookerHub />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
