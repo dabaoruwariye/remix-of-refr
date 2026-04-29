@@ -1,98 +1,107 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, Check, X, PartyPopper } from "lucide-react";
+import { ChevronDown } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
-type Status = "sent" | "in_process" | "hired" | "not_progressed";
+type ReferralStatus = "sent" | "in_process" | "hired" | "not_progressed";
 
-interface PendingConfirmation {
-  type: "pending";
+interface DbReferral {
   id: string;
-  referrerName: string;
-  referrerRole: string;
-  overlap: string;
+  referrer_id: string;
+  company_name: string | null;
+  role_signal: string | null;
+  email_body: string | null;
+  status: ReferralStatus;
+  created_at: string;
+  // resolved client-side from users table
+  referrer_name?: string;
 }
 
-interface ReferralSent {
-  type: "sent";
-  id: string;
-  referrerName: string;
-  company: string;
-  role: string;
-  date: string;
-  status: Status;
-  emailBody: string;
-}
-
-interface StatusUpdate {
-  type: "status";
-  id: string;
-  referrerName: string;
-  company: string;
-  role: string;
-  status: "in_process" | "hired" | "not_progressed";
-  date: string;
-}
-
-type FeedItem = PendingConfirmation | ReferralSent | StatusUpdate;
-
-const STATUS_STYLES: Record<Status, string> = {
+const STATUS_STYLES: Record<ReferralStatus, string> = {
   sent: "bg-accent/15 text-accent border-accent/20",
   in_process: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
   hired: "bg-success/15 text-success border-success/20",
   not_progressed: "bg-muted text-muted-foreground border-border",
 };
-const STATUS_LABELS: Record<Status, string> = {
-  sent: "Sent", in_process: "In Process", hired: "Hired", not_progressed: "Not Progressed",
+
+const STATUS_LABELS: Record<ReferralStatus, string> = {
+  sent: "Sent",
+  in_process: "In Process",
+  hired: "Hired",
+  not_progressed: "Not Progressed",
 };
 
-const INITIAL_FEED: FeedItem[] = [
-  {
-    type: "pending", id: "pc1",
-    referrerName: "Alex Morgan",
-    referrerRole: "Director of Engineering at Datadog",
-    overlap: "Stripe",
-  },
-  {
-    type: "status", id: "su1",
-    referrerName: "Priya Shah", company: "Notion", role: "Head of Product",
-    status: "hired", date: "Apr 18, 2026",
-  },
-  {
-    type: "sent", id: "rs1",
-    referrerName: "Priya Shah", company: "Notion", role: "Head of Product",
-    date: "Apr 5, 2026", status: "in_process",
-    emailBody: "Hi team — I want to introduce you to Jane Smith, who I worked closely with at Stripe. Jane led our Billing v3 platform end-to-end and is one of the sharpest PMs I've collaborated with. She's exploring head-of-product roles and Notion was top of her list.",
-  },
-  {
-    type: "sent", id: "rs2",
-    referrerName: "Liam Chen", company: "Linear", role: "Senior PM",
-    date: "Mar 22, 2026", status: "not_progressed",
-    emailBody: "Hi — Jane Smith is someone I'd strongly recommend for the Senior PM opening at Linear. She has shipped category-defining payments products at Stripe and is now looking for a focused, high-craft team.",
-  },
-];
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short", day: "numeric", year: "numeric",
+  });
+}
 
 interface Props {
   onGoToNetwork: () => void;
 }
 
 const LookerActivityTab = ({ onGoToNetwork }: Props) => {
-  const [feed, setFeed] = useState<FeedItem[]>(INITIAL_FEED);
+  const { user } = useAuth();
+  const [referrals, setReferrals] = useState<DbReferral[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const confirmPending = (id: string, _accepted: boolean) =>
-    setFeed(feed.filter((f) => f.id !== id));
+  useEffect(() => {
+    if (!user) return;
 
-  const visible = feed.filter((f) => f.type !== "pending");
-  const pending = feed.filter((f): f is PendingConfirmation => f.type === "pending");
+    const load = async () => {
+      const { data: rows } = await supabase
+        .from("referrals")
+        .select("id, referrer_id, company_name, role_signal, email_body, status, created_at")
+        .eq("looker_id", user.id)
+        .order("created_at", { ascending: false });
 
-  if (feed.length === 0) {
+      const referralRows = (rows ?? []) as DbReferral[];
+
+      // Resolve referrer names — policy "users: looker can read own referrers" allows this
+      const referrerIds = [...new Set(referralRows.map((r) => r.referrer_id))];
+      if (referrerIds.length > 0) {
+        const { data: userRows } = await supabase
+          .from("users")
+          .select("id, name")
+          .in("id", referrerIds);
+        const nameMap = new Map((userRows ?? []).map((u) => [u.id, u.name as string]));
+        for (const r of referralRows) {
+          r.referrer_name = nameMap.get(r.referrer_id) ?? undefined;
+        }
+      }
+
+      setReferrals(referralRows);
+      setLoading(false);
+    };
+
+    load();
+  }, [user?.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="w-5 h-5 rounded-full border-2 border-border border-t-foreground animate-spin" />
+      </div>
+    );
+  }
+
+  if (referrals.length === 0) {
     return (
       <div className="glass-card p-12 text-center">
         <h3 className="text-lg font-semibold text-foreground mb-2">Your profile is live.</h3>
-        <p className="text-sm text-muted-foreground mb-5">Head to the Network tab to find people who can vouch for you.</p>
-        <Button onClick={onGoToNetwork} className="rounded-full bg-accent text-accent-foreground hover:bg-accent/90">
+        <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto leading-relaxed">
+          When someone from your network refers you, it will appear here. Head to Network to
+          connect with people who can vouch for you.
+        </p>
+        <Button
+          onClick={onGoToNetwork}
+          className="rounded-full bg-accent text-accent-foreground hover:bg-accent/90"
+        >
           Go to Network
         </Button>
       </div>
@@ -101,75 +110,44 @@ const LookerActivityTab = ({ onGoToNetwork }: Props) => {
 
   return (
     <div className="space-y-4">
-      {pending.map((p) => (
-        <div key={p.id} className="glass-card p-5 border-l-4 border-l-yellow-500/70">
-          <p className="text-sm font-semibold text-foreground">
-            {p.referrerName} wants to connect with you on Refr.
-          </p>
-          <p className="text-xs text-muted-foreground mt-0.5">{p.referrerRole}</p>
-          <p className="text-sm text-foreground/80 mt-3 leading-relaxed">
-            It looks like you both worked at <span className="font-medium text-foreground">{p.overlap}</span> around the same time. Is that how you know them?
-          </p>
-          <div className="flex gap-2 mt-4">
-            <Button onClick={() => confirmPending(p.id, true)} size="sm" className="rounded-full gap-1.5 bg-accent text-accent-foreground hover:bg-accent/90">
-              <Check className="w-3.5 h-3.5" /> Yes I know them
-            </Button>
-            <Button onClick={() => confirmPending(p.id, false)} size="sm" variant="outline" className="rounded-full gap-1.5">
-              <X className="w-3.5 h-3.5" /> I don't recognize this person
-            </Button>
-          </div>
-        </div>
-      ))}
+      {referrals.map((referral) => {
+        const open = expandedId === referral.id;
+        const referrerName = referral.referrer_name ?? "Someone";
+        const company = referral.company_name ?? "a company";
+        const role = referral.role_signal ?? "a role";
 
-      {visible.map((item) => {
-        if (item.type === "status" && item.status === "hired") {
-          return (
-            <div key={item.id} className="glass-card p-5 bg-success/10 border-success/30">
-              <div className="flex items-center gap-2 mb-1">
-                <PartyPopper className="w-4 h-4 text-success" />
-                <p className="text-sm font-semibold text-success">You got the referral. Now go get the job.</p>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                {item.referrerName} → {item.role} at {item.company} · {item.date}
-              </p>
-            </div>
-          );
-        }
-        if (item.type === "status") {
-          return (
-            <div key={item.id} className="glass-card p-5">
-              <div className="flex items-center justify-between">
-                <p className="text-sm text-foreground">
-                  {item.referrerName}'s referral to <span className="font-medium">{item.company}</span> is now {STATUS_LABELS[item.status]}.
-                </p>
-                <Badge className={`text-[11px] border ${STATUS_STYLES[item.status]}`}>{STATUS_LABELS[item.status]}</Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{item.role} · {item.date}</p>
-            </div>
-          );
-        }
-        // sent
-        const open = expandedId === item.id;
         return (
-          <div key={item.id} className="glass-card p-5">
+          <div key={referral.id} className="glass-card p-5">
             <div className="flex items-start justify-between gap-3">
-              <div>
+              <div className="min-w-0">
                 <p className="text-sm font-semibold text-foreground">
-                  {item.referrerName} referred you for {item.role} at {item.company}
+                  {referrerName} referred you for {role} at {company}
                 </p>
-                <p className="text-xs text-muted-foreground mt-0.5">Sent {item.date}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Sent {formatDate(referral.created_at)}
+                </p>
               </div>
-              <Badge className={`text-[11px] border ${STATUS_STYLES[item.status]} shrink-0`}>{STATUS_LABELS[item.status]}</Badge>
+              <Badge
+                className={`text-[11px] border ${STATUS_STYLES[referral.status]} shrink-0`}
+              >
+                {STATUS_LABELS[referral.status]}
+              </Badge>
             </div>
-            <button
-              onClick={() => setExpandedId(open ? null : item.id)}
-              className="mt-3 inline-flex items-center gap-1 text-xs text-accent hover:underline"
-            >
-              {open ? "Hide email" : "See what was said about you"}
-              <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`} />
-            </button>
+
+            {referral.email_body && (
+              <button
+                onClick={() => setExpandedId(open ? null : referral.id)}
+                className="mt-3 inline-flex items-center gap-1 text-xs text-accent hover:underline"
+              >
+                {open ? "Hide email" : "See what was said about you"}
+                <ChevronDown
+                  className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`}
+                />
+              </button>
+            )}
+
             <AnimatePresence>
-              {open && (
+              {open && referral.email_body && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}
@@ -181,7 +159,9 @@ const LookerActivityTab = ({ onGoToNetwork }: Props) => {
                     <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-2">
                       Here's exactly what was said about you
                     </p>
-                    <p className="text-sm text-foreground/80 leading-relaxed">{item.emailBody}</p>
+                    <p className="text-sm text-foreground/80 leading-relaxed whitespace-pre-wrap">
+                      {referral.email_body}
+                    </p>
                   </div>
                 </motion.div>
               )}

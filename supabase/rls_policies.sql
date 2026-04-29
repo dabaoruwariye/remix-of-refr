@@ -150,8 +150,8 @@ create policy "invites: public read by id"
   using (true);
 
 
--- ── cross-user read policies (needed for /refer matching) ────
--- Referrers can read the name/email of lookers they have a confirmed relationship with
+-- ── cross-user read policies (needed for /refer matching & overlap) ─────────
+-- Referrers can read names of lookers they have a confirmed relationship with
 create policy "users: referrer can read confirmed connections"
   on public.users for select
   to authenticated
@@ -164,7 +164,7 @@ create policy "users: referrer can read confirmed connections"
     )
   );
 
--- Referrers can read work history of confirmed connected lookers
+-- Referrers can read work history of confirmed connected lookers (for matching + overlap)
 create policy "work_history: referrer can read confirmed connections"
   on public.work_history for select
   to authenticated
@@ -174,5 +174,42 @@ create policy "work_history: referrer can read confirmed connections"
       where r.looker_id = user_id
         and r.referrer_id = auth.uid()
         and r.confirmed_by_looker = true
+    )
+  );
+
+-- Referrers can read education of confirmed connected lookers (for overlap detection)
+create policy "education: referrer can read confirmed connections"
+  on public.education for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.relationships r
+      where r.looker_id = user_id
+        and r.referrer_id = auth.uid()
+        and r.confirmed_by_looker = true
+    )
+  );
+
+-- Referrers can read names of lookers they have referred (for ReferralsTab display)
+create policy "users: referrer can read referral lookers"
+  on public.users for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.referrals ref
+      where ref.looker_id = id
+        and ref.referrer_id = auth.uid()
+    )
+  );
+
+-- Lookers can read names of referrers who referred them (for LookerActivityTab display)
+create policy "users: looker can read own referrers"
+  on public.users for select
+  to authenticated
+  using (
+    exists (
+      select 1 from public.referrals ref
+      where ref.referrer_id = id
+        and ref.looker_id = auth.uid()
     )
   );

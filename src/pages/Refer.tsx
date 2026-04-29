@@ -49,12 +49,14 @@ function MatchCard({
   referrerProfile,
   roleSignal,
   companyName,
+  onReferralSent,
 }: {
   match: LookerMatch;
   index: number;
   referrerProfile: ReferrerProfile | null;
   roleSignal: string;
   companyName: string;
+  onReferralSent: (lookerId: string, lookerName: string, companyName: string) => void;
 }) {
   const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
@@ -76,6 +78,7 @@ function MatchCard({
   // Send state
   const [sending, setSending] = useState(false);
   const [sent, setSent] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
 
   const loadedRef = useRef(false);
 
@@ -89,11 +92,10 @@ function MatchCard({
         const sc = result.shared_schools[0] ?? "";
         setOverlapCompany(co);
         setOverlapSchool(sc);
-
         if (co) setRelationshipCtx(`We worked together at ${co}.`);
         else if (sc) setRelationshipCtx(`We both went to ${sc}.`);
       })
-      .catch(() => { /* ignore */ })
+      .catch(() => {})
       .finally(() => setOverlapLoaded(true));
   }, [expanded, user, match.looker_id]);
 
@@ -101,16 +103,15 @@ function MatchCard({
     if (!referrerProfile) return;
     setGenerating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
       const res = await fetch(`${supabaseUrl}/functions/v1/draft-email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-          "apikey": supabaseAnonKey,
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey": anonKey,
         },
         body: JSON.stringify({
           referrer_name: referrerProfile.name,
@@ -129,7 +130,7 @@ function MatchCard({
         }),
       });
 
-      const json = await res.json() as { draft?: string; error?: string };
+      const json = await res.json() as { draft?: string };
       if (json.draft) setDraft(json.draft);
     } catch { /* silently fail — user can write manually */ }
     setGenerating(false);
@@ -138,10 +139,68 @@ function MatchCard({
   const handleSend = async () => {
     if (!user || !draft) return;
     setSending(true);
-    // Success state — actual email send wired in next session
-    await new Promise((r) => setTimeout(r, 600));
-    setSending(false);
-    setSent(true);
+    setSendError(null);
+
+    try {
+      // Part 1 — Save referral to DB
+      const { data: newReferral, error: insertError } = await supabase
+        .from("referrals")
+        .insert({
+          referrer_id: user.id,
+          looker_id: match.looker_id,
+          company_name: companyName || null,
+          role_signal: roleSignal || null,
+          hiring_manager_email: hiringEmail.trim() || null,
+          email_body: draft,
+          vouch_text: vouchText || null,
+          status: "sent",
+        })
+        .select("id")
+        .single();
+
+      if (insertError) {
+        console.error("referrals insert error:", insertError.code, insertError.message, insertError.details);
+        throw insertError;
+      }
+
+      // Parts 2 & 3 — Send emails via edge function (fire-and-forget).
+      // Pass all data inline so the function doesn't need a DB round-trip.
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      fetch(`${supabaseUrl}/functions/v1/send-referral`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+          "apikey": anonKey,
+        },
+        body: JSON.stringify({
+          referral_id: newReferral.id,
+          looker_id: match.looker_id,
+          referrer_name: referrerProfile?.name ?? "",
+          looker_name: match.name,
+          company_name: companyName,
+          role_signal: roleSignal,
+          hiring_manager_email: hiringEmail.trim(),
+          email_body: draft,
+        }),
+      })
+        .then(async (res) => {
+          if (!res.ok) {
+            const text = await res.text();
+            console.error("[send-referral] failed:", res.status, text);
+          }
+        })
+        .catch((err) => console.error("[send-referral] fetch error:", err));
+
+      setSent(true);
+      onReferralSent(match.looker_id, match.name, companyName);
+    } catch (err) {
+      setSendError(err instanceof Error ? err.message : "Failed to save referral");
+    } finally {
+      setSending(false);
+    }
   };
 
   return (
@@ -218,20 +277,7 @@ function MatchCard({
             transition={{ duration: 0.2 }}
             className="overflow-hidden border-t border-border/50"
           >
-            {sent ? (
-              <div className="p-6 flex flex-col items-center text-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-success/15 flex items-center justify-center">
-                  <Check className="w-5 h-5 text-success" />
-                </div>
-                <p className="text-sm font-semibold text-foreground">Introduction sent</p>
-                <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
-                  {hiringEmail
-                    ? `Your intro email has been queued for ${hiringEmail}.`
-                    : "Your referral has been recorded."}{" "}
-                  {match.name} will be notified.
-                </p>
-              </div>
-            ) : (
+            {!sent && (
               <div className="p-6 space-y-5">
                 {/* Relationship context */}
                 <div className="space-y-1.5">
@@ -246,7 +292,7 @@ function MatchCard({
                     <Textarea
                       value={relationshipCtx}
                       onChange={(e) => setRelationshipCtx(e.target.value)}
-                      placeholder={`e.g. We worked together at Stripe for two years…`}
+                      placeholder="e.g. We worked together at Stripe for two years…"
                       className="min-h-[70px] resize-none text-sm"
                     />
                   )}
@@ -281,7 +327,7 @@ function MatchCard({
                   {generating ? "Generating…" : "Generate email draft"}
                 </Button>
 
-                {/* Email draft */}
+                {/* Email draft textarea */}
                 {draft && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -307,13 +353,21 @@ function MatchCard({
                     type="email"
                     value={hiringEmail}
                     onChange={(e) => setHiringEmail(e.target.value)}
-                    placeholder={companyName ? `hiring@${companyName.toLowerCase().replace(/\s+/g, "")}.com` : "hiring@company.com"}
+                    placeholder={
+                      companyName
+                        ? `hiring@${companyName.toLowerCase().replace(/\s+/g, "")}.com`
+                        : "hiring@company.com"
+                    }
                     className="text-sm"
                   />
                   <p className="text-[11px] text-muted-foreground">
                     Check LinkedIn or the company website if unsure.
                   </p>
                 </div>
+
+                {sendError && (
+                  <p className="text-xs text-destructive">{sendError}</p>
+                )}
 
                 {/* Send */}
                 <Button
@@ -495,6 +549,7 @@ const Refer = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [referrerProfile, setReferrerProfile] = useState<ReferrerProfile | null>(null);
+  const [sentState, setSentState] = useState<{ lookerName: string; companyName: string } | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -505,7 +560,7 @@ const Refer = () => {
       setError(null);
       try {
         const [matchResults, { data: userRow }, { data: workRows }] = await Promise.all([
-          matchLookers(user.id, roleSignal),
+          matchLookers(user.id, roleSignal, companyName || undefined),
           supabase.from("users").select("name").eq("id", user.id).single(),
           supabase
             .from("work_history")
@@ -517,8 +572,6 @@ const Refer = () => {
 
         if (!cancelled) {
           setMatches(matchResults);
-
-          // Pick most recent position (end_date null = current)
           const current = workRows?.find((r) => !r.end_date) ?? workRows?.[0];
           setReferrerProfile({
             name: userRow?.name ?? "",
@@ -535,7 +588,12 @@ const Refer = () => {
 
     load();
     return () => { cancelled = true; };
-  }, [user?.id, roleSignal]);
+  }, [user?.id, roleSignal, companyName]);
+
+  const handleReferralSent = (lookerId: string, lookerName: string, sentCompany: string) => {
+    setMatches((prev) => prev.filter((m) => m.looker_id !== lookerId));
+    setSentState({ lookerName, companyName: sentCompany });
+  };
 
   const goToNetwork = () => navigate("/dashboard?tab=network");
 
@@ -556,8 +614,48 @@ const Refer = () => {
       </header>
 
       <main className="pt-20 pb-16 container max-w-2xl space-y-4">
-        {/* Signal banner */}
-        <div className="mb-4">
+        {/* ── Success screen ─────────────────────────────────────────────── */}
+        {sentState && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="flex flex-col items-center text-center pt-16 pb-8"
+          >
+            <div className="w-16 h-16 rounded-full bg-success/15 flex items-center justify-center mb-6">
+              <Check className="w-8 h-8 text-success" />
+            </div>
+
+            <h1 className="text-2xl font-semibold text-foreground mb-3">
+              Introduction sent{sentState.companyName ? ` to ${sentState.companyName}` : ""}
+            </h1>
+
+            <p className="text-sm text-muted-foreground max-w-sm leading-relaxed mb-8">
+              {sentState.lookerName} will be notified and you'll hear back when there's movement.
+            </p>
+
+            <div className="flex flex-col sm:flex-row gap-3 w-full max-w-xs">
+              <Button
+                onClick={() => navigate("/dashboard")}
+                className="flex-1 rounded-full bg-accent text-accent-foreground hover:bg-accent/90"
+              >
+                Back to dashboard
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setSentState(null)}
+                className="flex-1 rounded-full border-border/60 text-foreground hover:bg-muted"
+              >
+                Refer someone else
+              </Button>
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── Normal content ─────────────────────────────────────────────── */}
+        {!sentState && (
+          <>
+            <div className="mb-4">
           <div className="flex items-center gap-2 mb-2">
             <Sparkles className="w-4 h-4 text-accent" />
             <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -590,7 +688,6 @@ const Refer = () => {
           </p>
         </div>
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-24 gap-4">
             <div className="w-5 h-5 rounded-full border-2 border-border border-t-accent animate-spin" />
@@ -600,7 +697,6 @@ const Refer = () => {
 
         {!loading && (
           <>
-            {/* Error */}
             {error && (
               <div className="glass-card p-6 text-center">
                 <p className="text-sm text-destructive mb-1">Couldn't load connections</p>
@@ -608,12 +704,10 @@ const Refer = () => {
               </div>
             )}
 
-            {/* No confirmed connections */}
             {!error && matches.length === 0 && (
               <NoConnectionsCard onGoToNetwork={goToNetwork} />
             )}
 
-            {/* Confirmed matches */}
             {!error && matches.length > 0 && (
               <div className="space-y-4">
                 {matches.map((match, i) => (
@@ -624,12 +718,12 @@ const Refer = () => {
                     referrerProfile={referrerProfile}
                     roleSignal={roleSignal}
                     companyName={companyName}
+                    onReferralSent={handleReferralSent}
                   />
                 ))}
               </div>
             )}
 
-            {/* Divider when matches exist */}
             {!error && matches.length > 0 && (
               <div className="flex items-center gap-3 py-2">
                 <div className="flex-1 h-px bg-border/50" />
@@ -638,8 +732,9 @@ const Refer = () => {
               </div>
             )}
 
-            {/* Manual refer — always available */}
             <ManualReferForm roleSignal={roleSignal} companyName={companyName} />
+          </>
+        )}
           </>
         )}
       </main>

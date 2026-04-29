@@ -53,6 +53,7 @@ function buildReasons(
 export async function matchLookers(
   referrerId: string,
   roleSignal: string,
+  companyName?: string,
 ): Promise<LookerMatch[]> {
   // 1. Get confirmed relationships for this referrer
   const { data: rels, error: relsError } = await supabase
@@ -116,9 +117,22 @@ export async function matchLookers(
 
   const signal = roleSignal.toLowerCase();
 
-  // 5. Assemble, score, sort, return top 3
+  // 5. Collect looker_ids already referred to this company (exclude from results)
+  let alreadyReferred = new Set<string>();
+  if (companyName) {
+    const { data: existing } = await supabase
+      .from("referrals")
+      .select("looker_id")
+      .eq("referrer_id", referrerId)
+      .eq("company_name", companyName)
+      .in("status", ["sent", "in_process", "hired"]);
+    alreadyReferred = new Set((existing ?? []).map((r) => r.looker_id as string));
+  }
+
+  // 6. Assemble, score, sort, return top 3
   const scored: LookerMatch[] = [];
   for (const u of (userRows ?? [])) {
+    if (alreadyReferred.has(u.id)) continue;
     const profile = profileMap.get(u.id);
     if (!profile) continue; // no visible profile — skip
 
