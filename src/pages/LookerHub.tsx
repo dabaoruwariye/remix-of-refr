@@ -1,22 +1,20 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Send, DollarSign, Users, User } from "lucide-react";
-import NetworkTab from "@/components/referrer/NetworkTab";
-import ReferralsTab from "@/components/referrer/ReferralsTab";
-import EarningsTab from "@/components/referrer/EarningsTab";
-import ProfileTab from "@/components/referrer/ProfileTab";
+import { User, Activity, Users } from "lucide-react";
+import LookerProfileTab from "@/components/looker/LookerProfileTab";
+import LookerActivityTab from "@/components/looker/LookerActivityTab";
+import LookerNetworkTab from "@/components/looker/LookerNetworkTab";
 
 const TABS = [
-  { id: "referrals", label: "Referrals", icon: Send },
-  { id: "earnings", label: "Earnings", icon: DollarSign },
+  { id: "profile", label: "My Profile", icon: User },
+  { id: "activity", label: "Referral Activity", icon: Activity },
   { id: "network", label: "Network", icon: Users },
-  { id: "profile", label: "Profile", icon: User },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
-const ReferrerHub = () => {
-  const [activeTab, setActiveTab] = useState<TabId>("referrals");
+const LookerHub = () => {
+  const [activeTab, setActiveTab] = useState<TabId>("profile");
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -39,7 +37,7 @@ const ReferrerHub = () => {
                   <span className="hidden sm:inline">{tab.label}</span>
                   {isActive && (
                     <motion.div
-                      layoutId="tab-bg"
+                      layoutId="looker-tab-bg"
                       className="absolute inset-0 bg-muted rounded-full -z-10"
                       transition={{ type: "spring", duration: 0.4, bounce: 0.15 }}
                     />
@@ -54,21 +52,20 @@ const ReferrerHub = () => {
         </div>
       </header>
 
-      <main className="pt-20 pb-16 container max-w-4xl">
+      <main className="pt-20 pb-16 container max-w-3xl">
         <motion.div
           key={activeTab}
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.25 }}
         >
-          {activeTab === "network" && <NetworkTab />}
-          {activeTab === "referrals" && <ReferralsTab />}
-          {activeTab === "earnings" && <EarningsTab />}
-          {activeTab === "profile" && <ProfileTab />}
+          {activeTab === "profile" && <LookerProfileTab />}
+          {activeTab === "activity" && <LookerActivityTab onGoToNetwork={() => setActiveTab("network")} />}
+          {activeTab === "network" && <LookerNetworkTab />}
         </motion.div>
       </main>
     </div>
   );
 };
 
-export default ReferrerHub;
+export default LookerHub;
