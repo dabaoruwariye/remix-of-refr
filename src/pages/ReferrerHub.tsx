@@ -1,22 +1,22 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Users, Send, DollarSign, User } from "lucide-react";
+import { Send, DollarSign, Users, User } from "lucide-react";
 import NetworkTab from "@/components/referrer/NetworkTab";
 import ReferralsTab from "@/components/referrer/ReferralsTab";
 import EarningsTab from "@/components/referrer/EarningsTab";
 import ProfileTab from "@/components/referrer/ProfileTab";
 
 const TABS = [
-  { id: "network", label: "Network", icon: Users },
   { id: "referrals", label: "Referrals", icon: Send },
   { id: "earnings", label: "Earnings", icon: DollarSign },
+  { id: "network", label: "Network", icon: Users },
   { id: "profile", label: "Profile", icon: User },
 ] as const;
 
 type TabId = (typeof TABS)[number]["id"];
 
 const ReferrerHub = () => {
-  const [activeTab, setActiveTab] = useState<TabId>("network");
+  const [activeTab, setActiveTab] = useState<TabId>("referrals");
 
   return (
     <div className="min-h-screen bg-background text-foreground">
