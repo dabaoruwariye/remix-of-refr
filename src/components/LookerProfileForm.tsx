@@ -40,7 +40,7 @@ const LookerProfileForm = () => {
 
   const next = () => {
     if (step === TOTAL) {
-      navigate("/dashboard");
+      navigate("/looker-dashboard");
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL));
