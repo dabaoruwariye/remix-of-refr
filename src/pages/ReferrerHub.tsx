@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 import { Send, DollarSign, Users, User } from "lucide-react";
 import NetworkTab from "@/components/referrer/NetworkTab";
 import ReferralsTab from "@/components/referrer/ReferralsTab";
@@ -17,6 +18,7 @@ type TabId = (typeof TABS)[number]["id"];
 
 const ReferrerHub = () => {
   const [activeTab, setActiveTab] = useState<TabId>("referrals");
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -48,7 +50,10 @@ const ReferrerHub = () => {
               );
             })}
           </div>
-          <button className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+          <button
+            onClick={() => navigate("/login")}
+            className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
             Log out
           </button>
         </div>

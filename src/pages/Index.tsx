@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Link } from "react-router-dom";
 import RoleSelection from "@/components/RoleSelection";
 import LookerProfileForm from "@/components/LookerProfileForm";
 import ReferrerDashboard from "@/components/ReferrerDashboard";
@@ -28,9 +29,12 @@ const Index = () => {
                 ← Back
               </button>
             )}
-            <button className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <Link
+              to="/login"
+              className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+            >
               Log in
-            </button>
+            </Link>
           </div>
         </div>
       </header>
