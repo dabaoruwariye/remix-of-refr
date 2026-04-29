@@ -56,7 +56,7 @@ const MOCK_REFERRALS: Referral[] = [
     emailBody: "Hi hiring team — I'd like to recommend Aisha Patel for the ML Engineering Lead position. Aisha built the personalization ML pipeline at Airbnb that improved conversion by 12%. She's deeply skilled in recommendation systems and production ML infrastructure." },
 ];
 
-const REFERRALS_REMAINING = 3;
+const REFERRALS_REMAINING: number = 3;
 const RESET_DATE = "May 1, 2026";
 
 const ReferralsTab = () => {
