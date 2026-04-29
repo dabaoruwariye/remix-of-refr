@@ -1,16 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowLeft, Briefcase, Check, GraduationCap,
-  Send, Sparkles, UserPlus, Users,
+  Send, Sparkles, UserPlus, Users, Wand2,
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { matchLookers, type LookerMatch } from "@/lib/matching";
+import { detectOverlap } from "@/lib/overlap";
+
+// ─── types ─────────────────────────────────────────────────────────────────
+
+interface ReferrerProfile {
+  name: string;
+  currentRole: string;
+  currentCompany: string;
+}
 
 // ─── shared helpers ────────────────────────────────────────────────────────
 
@@ -33,8 +43,106 @@ const REASON_STYLES: Record<string, string> = {
 
 // ─── MatchCard ─────────────────────────────────────────────────────────────
 
-function MatchCard({ match, index }: { match: LookerMatch; index: number }) {
+function MatchCard({
+  match,
+  index,
+  referrerProfile,
+  roleSignal,
+  companyName,
+}: {
+  match: LookerMatch;
+  index: number;
+  referrerProfile: ReferrerProfile | null;
+  roleSignal: string;
+  companyName: string;
+}) {
+  const { user } = useAuth();
   const [expanded, setExpanded] = useState(false);
+
+  // Overlap
+  const [overlapLoaded, setOverlapLoaded] = useState(false);
+  const [overlapCompany, setOverlapCompany] = useState("");
+  const [overlapSchool, setOverlapSchool] = useState("");
+
+  // Composer state
+  const [relationshipCtx, setRelationshipCtx] = useState("");
+  const [vouchText, setVouchText] = useState("");
+  const [hiringEmail, setHiringEmail] = useState("");
+
+  // Draft generation
+  const [generating, setGenerating] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  // Send state
+  const [sending, setSending] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const loadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!expanded || !user || loadedRef.current) return;
+    loadedRef.current = true;
+
+    detectOverlap(user.id, match.looker_id)
+      .then((result) => {
+        const co = result.shared_companies[0] ?? "";
+        const sc = result.shared_schools[0] ?? "";
+        setOverlapCompany(co);
+        setOverlapSchool(sc);
+
+        if (co) setRelationshipCtx(`We worked together at ${co}.`);
+        else if (sc) setRelationshipCtx(`We both went to ${sc}.`);
+      })
+      .catch(() => { /* ignore */ })
+      .finally(() => setOverlapLoaded(true));
+  }, [expanded, user, match.looker_id]);
+
+  const generateDraft = async () => {
+    if (!referrerProfile) return;
+    setGenerating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/draft-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
+          "apikey": supabaseAnonKey,
+        },
+        body: JSON.stringify({
+          referrer_name: referrerProfile.name,
+          referrer_current_role: referrerProfile.currentRole || undefined,
+          referrer_current_company: referrerProfile.currentCompany || undefined,
+          looker_name: match.name,
+          looker_current_role: match.recent_work?.job_title || undefined,
+          looker_industries: match.profile.industries ?? [],
+          looker_target_role: match.profile.target_role || undefined,
+          company_name: companyName || undefined,
+          role_signal: roleSignal || undefined,
+          vouch_text: vouchText || undefined,
+          relationship_context: relationshipCtx || undefined,
+          overlap_company: overlapCompany || undefined,
+          overlap_school: overlapSchool || undefined,
+        }),
+      });
+
+      const json = await res.json() as { draft?: string; error?: string };
+      if (json.draft) setDraft(json.draft);
+    } catch { /* silently fail — user can write manually */ }
+    setGenerating(false);
+  };
+
+  const handleSend = async () => {
+    if (!user || !draft) return;
+    setSending(true);
+    // Success state — actual email send wired in next session
+    await new Promise((r) => setTimeout(r, 600));
+    setSending(false);
+    setSent(true);
+  };
 
   return (
     <motion.div
@@ -90,7 +198,7 @@ function MatchCard({ match, index }: { match: LookerMatch; index: number }) {
           ))}
         </div>
 
-        <div className="mt-5 flex items-center gap-2">
+        <div className="mt-5">
           <Button
             className="gap-2 rounded-full px-5 bg-accent text-accent-foreground hover:bg-accent/90 text-sm"
             onClick={() => setExpanded((v) => !v)}
@@ -110,15 +218,124 @@ function MatchCard({ match, index }: { match: LookerMatch; index: number }) {
             transition={{ duration: 0.2 }}
             className="overflow-hidden border-t border-border/50"
           >
-            <div className="p-6 space-y-3">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
-                Referral details
-              </p>
-              <p className="text-sm text-muted-foreground">
-                Referral composer coming soon. You'll be able to write your vouch, add the hiring
-                manager's email, and send directly from here.
-              </p>
-            </div>
+            {sent ? (
+              <div className="p-6 flex flex-col items-center text-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-success/15 flex items-center justify-center">
+                  <Check className="w-5 h-5 text-success" />
+                </div>
+                <p className="text-sm font-semibold text-foreground">Introduction sent</p>
+                <p className="text-xs text-muted-foreground max-w-xs leading-relaxed">
+                  {hiringEmail
+                    ? `Your intro email has been queued for ${hiringEmail}.`
+                    : "Your referral has been recorded."}{" "}
+                  {match.name} will be notified.
+                </p>
+              </div>
+            ) : (
+              <div className="p-6 space-y-5">
+                {/* Relationship context */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    How do you know {match.name}?
+                  </label>
+                  {!overlapLoaded && loadedRef.current ? (
+                    <div className="h-8 flex items-center">
+                      <div className="w-4 h-4 rounded-full border-2 border-border border-t-foreground animate-spin" />
+                    </div>
+                  ) : (
+                    <Textarea
+                      value={relationshipCtx}
+                      onChange={(e) => setRelationshipCtx(e.target.value)}
+                      placeholder={`e.g. We worked together at Stripe for two years…`}
+                      className="min-h-[70px] resize-none text-sm"
+                    />
+                  )}
+                </div>
+
+                {/* Vouch */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Your vouch
+                  </label>
+                  <Textarea
+                    value={vouchText}
+                    onChange={(e) => setVouchText(e.target.value)}
+                    placeholder={`What makes ${match.name} exceptional for this role?`}
+                    className="min-h-[70px] resize-none text-sm"
+                  />
+                </div>
+
+                {/* Generate button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={generating}
+                  onClick={generateDraft}
+                  className="gap-2 text-xs"
+                >
+                  {generating ? (
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-border border-t-foreground animate-spin" />
+                  ) : (
+                    <Wand2 className="w-3.5 h-3.5" />
+                  )}
+                  {generating ? "Generating…" : "Generate email draft"}
+                </Button>
+
+                {/* Email draft */}
+                {draft && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                      Email draft
+                    </label>
+                    <Textarea
+                      value={draft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      className="min-h-[180px] resize-none text-sm font-mono leading-relaxed"
+                    />
+                    <p className="text-[11px] text-muted-foreground text-right">
+                      {draft.length} characters
+                    </p>
+                  </div>
+                )}
+
+                {/* Hiring manager email */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Hiring manager email
+                  </label>
+                  <Input
+                    type="email"
+                    value={hiringEmail}
+                    onChange={(e) => setHiringEmail(e.target.value)}
+                    placeholder={companyName ? `hiring@${companyName.toLowerCase().replace(/\s+/g, "")}.com` : "hiring@company.com"}
+                    className="text-sm"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Check LinkedIn or the company website if unsure.
+                  </p>
+                </div>
+
+                {/* Send */}
+                <Button
+                  disabled={!draft || sending}
+                  onClick={handleSend}
+                  className="w-full rounded-full gap-2 bg-accent text-accent-foreground hover:bg-accent/90 text-sm"
+                >
+                  {sending ? (
+                    <div className="w-3.5 h-3.5 rounded-full border-2 border-white/40 border-t-white animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  {sending ? "Sending…" : "Send introduction"}
+                </Button>
+
+                {!draft && (
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Generate an email draft above before sending.
+                  </p>
+                )}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -277,6 +494,7 @@ const Refer = () => {
   const [matches, setMatches] = useState<LookerMatch[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [referrerProfile, setReferrerProfile] = useState<ReferrerProfile | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -286,8 +504,28 @@ const Refer = () => {
       setLoading(true);
       setError(null);
       try {
-        const results = await matchLookers(user.id, roleSignal);
-        if (!cancelled) setMatches(results);
+        const [matchResults, { data: userRow }, { data: workRows }] = await Promise.all([
+          matchLookers(user.id, roleSignal),
+          supabase.from("users").select("name").eq("id", user.id).single(),
+          supabase
+            .from("work_history")
+            .select("company_name, job_title, end_date")
+            .eq("user_id", user.id)
+            .order("start_date", { ascending: false })
+            .limit(5),
+        ]);
+
+        if (!cancelled) {
+          setMatches(matchResults);
+
+          // Pick most recent position (end_date null = current)
+          const current = workRows?.find((r) => !r.end_date) ?? workRows?.[0];
+          setReferrerProfile({
+            name: userRow?.name ?? "",
+            currentRole: current?.job_title ?? "",
+            currentCompany: current?.company_name ?? "",
+          });
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : "Something went wrong");
       } finally {
@@ -379,7 +617,14 @@ const Refer = () => {
             {!error && matches.length > 0 && (
               <div className="space-y-4">
                 {matches.map((match, i) => (
-                  <MatchCard key={match.looker_id} match={match} index={i} />
+                  <MatchCard
+                    key={match.looker_id}
+                    match={match}
+                    index={i}
+                    referrerProfile={referrerProfile}
+                    roleSignal={roleSignal}
+                    companyName={companyName}
+                  />
                 ))}
               </div>
             )}

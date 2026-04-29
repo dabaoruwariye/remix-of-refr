@@ -25,8 +25,6 @@ export interface LookerMatch {
   recent_work: RecentWork | null;
 }
 
-// Score words in target_role against the free-text role_signal.
-// Weight: 3 (normalised by word count so a full match = 3.0).
 function scoreRole(targetRole: string | null, signal: string): number {
   if (!targetRole || !signal) return 0;
   const words = targetRole.toLowerCase().split(/\W+/).filter((w) => w.length > 2);
@@ -35,8 +33,6 @@ function scoreRole(targetRole: string | null, signal: string): number {
   return matched > 0 ? (matched / words.length) * 3 : 0;
 }
 
-// Score industries against the free-text role_signal.
-// Weight: 1 per matching industry.
 function scoreIndustries(industries: string[], signal: string): number {
   if (!industries?.length || !signal) return 0;
   return industries.filter((ind) => signal.includes(ind.toLowerCase())).length;
@@ -48,14 +44,9 @@ function buildReasons(
   signal: string,
 ): string[] {
   const reasons: string[] = [];
-
   if (scoreRole(targetRole, signal) > 0) reasons.push("Target role match");
-
   if (scoreIndustries(industries, signal) > 0) reasons.push("Same industry");
-
-  // Always present since only confirmed relationships are considered
   reasons.push("Confirmed connection");
-
   return reasons;
 }
 
@@ -63,38 +54,83 @@ export async function matchLookers(
   referrerId: string,
   roleSignal: string,
 ): Promise<LookerMatch[]> {
-  const { data, error } = await supabase.rpc("get_referrer_lookers", {
-    p_referrer_id: referrerId,
-  });
+  // 1. Get confirmed relationships for this referrer
+  const { data: rels, error: relsError } = await supabase
+    .from("relationships")
+    .select("looker_id")
+    .eq("referrer_id", referrerId)
+    .eq("confirmed_by_looker", true);
 
-  if (error) throw error;
+  if (relsError) throw relsError;
+  if (!rels || rels.length === 0) return [];
+
+  const lookerIds = rels.map((r) => r.looker_id as string);
+
+  // 2. Fetch user names, visible profiles, and work history in parallel.
+  //    The cross-user RLS policies allow referrers to read confirmed connections.
+  const [
+    { data: userRows, error: usersError },
+    { data: profiles },
+    { data: workRows },
+  ] = await Promise.all([
+    supabase.from("users").select("id, name").in("id", lookerIds),
+    supabase
+      .from("looker_profiles")
+      .select("user_id, target_role, seniority, industries, visible")
+      .in("user_id", lookerIds)
+      .eq("visible", true),
+    supabase
+      .from("work_history")
+      .select("user_id, company_name, job_title, start_date, end_date, description")
+      .in("user_id", lookerIds)
+      .order("start_date", { ascending: false }),
+  ]);
+
+  if (usersError) throw usersError;
+
+  // 3. Index profiles by user_id
+  const profileMap = new Map<string, LookerProfile>();
+  for (const p of (profiles ?? [])) {
+    profileMap.set(p.user_id, {
+      user_id: p.user_id,
+      target_role: p.target_role ?? null,
+      seniority: p.seniority ?? null,
+      industries: p.industries ?? [],
+      visible: p.visible ?? true,
+    });
+  }
+
+  // 4. Index most-recent work entry by user_id (rows already ordered desc by start_date)
+  const workMap = new Map<string, RecentWork>();
+  for (const w of (workRows ?? [])) {
+    if (!workMap.has(w.user_id)) {
+      workMap.set(w.user_id, {
+        company_name: w.company_name ?? "",
+        job_title: w.job_title ?? "",
+        start_date: w.start_date ?? "",
+        end_date: w.end_date ?? null,
+        description: w.description ?? "",
+      });
+    }
+  }
 
   const signal = roleSignal.toLowerCase();
 
-  const scored = ((data ?? []) as Array<{
-    looker_id: string;
-    name: string;
-    email: string;
-    profile: LookerProfile;
-    recent_work: RecentWork | null;
-  }>).map((row) => {
-    const roleScore = scoreRole(row.profile?.target_role ?? null, signal);
-    const indScore  = scoreIndustries(row.profile?.industries ?? [], signal);
+  // 5. Assemble, score, sort, return top 3
+  const scored: LookerMatch[] = [];
+  for (const u of (userRows ?? [])) {
+    const profile = profileMap.get(u.id);
+    if (!profile) continue; // no visible profile — skip
 
-    return {
-      looker_id:    row.looker_id,
-      name:         row.name,
-      score:        roleScore + indScore,
-      match_reasons: buildReasons(
-        row.profile?.target_role ?? null,
-        row.profile?.industries ?? [],
-        signal,
-      ),
-      profile:      row.profile,
-      recent_work:  row.recent_work,
-    } satisfies LookerMatch;
-  });
+    scored.push({
+      looker_id: u.id,
+      name: u.name ?? "",
+      score: scoreRole(profile.target_role, signal) + scoreIndustries(profile.industries, signal),
+      match_reasons: buildReasons(profile.target_role, profile.industries, signal),
+      profile,
+      recent_work: workMap.get(u.id) ?? null,
+    });
+  }
 
-  // Sort descending by score, return top 3
   return scored.sort((a, b) => b.score - a.score).slice(0, 3);
 }

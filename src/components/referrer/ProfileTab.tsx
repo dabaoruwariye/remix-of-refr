@@ -9,7 +9,6 @@ import { INDUSTRIES } from "@/lib/refrConstants";
 import { useAuth } from "@/context/AuthContext";
 import { supabase } from "@/lib/supabase";
 import { JOBS_CACHE_PREFIX } from "@/lib/jobs";
-import { type Position, type Education } from "@/components/shared/ExperienceCard";
 
 const ProfileTab = () => {
   const { user } = useAuth();
