@@ -9,7 +9,9 @@ import { ArrowRight, ArrowLeft } from "lucide-react";
 import OnboardingProgress from "./OnboardingProgress";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import ResumeUpload from "./ResumeUpload";
+import ExperienceCard, { type Position, type Education } from "./shared/ExperienceCard";
 import { useAuth } from "@/context/AuthContext";
+import { uploadResume, parsedToPositions, parsedToEducation } from "@/lib/resume";
 
 const INDUSTRIES = [
   "Technology", "Healthcare", "Finance", "Education", "Consumer",
@@ -29,13 +31,20 @@ const LookerProfileForm = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signup } = useAuth();
+
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Resume parsing state
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: "", email: "", password: "",
     resume: null as File | null,
+    positions: [] as Position[],
+    education: [] as Education[],
     industries: [] as string[], targetRole: "", seniority: "",
     visible: true,
   });
@@ -43,21 +52,46 @@ const LookerProfileForm = () => {
   const update = (field: string, value: unknown) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const handleFileSelect = async (file: File | null) => {
+    update("resume", file);
+    if (!file) return;
+    setParsing(true);
+    setParseError(null);
+    try {
+      const data = await uploadResume(file);
+      update("positions", parsedToPositions(data.work_history));
+      update("education", parsedToEducation(data.education));
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : "Failed to parse resume. You can fill in your experience manually.");
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const next = async () => {
-    if (step === TOTAL) {
+    setError(null);
+
+    // Step 1 → create account first so the user is authenticated for step 2+
+    if (step === 1) {
       setSubmitting(true);
-      setError(null);
       try {
         const inviteId = searchParams.get("invite_id") ?? undefined;
         await signup(form.name, form.email, form.password, "looker", inviteId);
-        navigate("/looker-dashboard");
-      } catch (err: unknown) {
+        setStep(2);
+      } catch (err) {
         setError(err instanceof Error ? err.message : "Signup failed. Please try again.");
       } finally {
         setSubmitting(false);
       }
       return;
     }
+
+    // Last step → just navigate (account + profile already created at step 1)
+    if (step === TOTAL) {
+      navigate("/looker-dashboard");
+      return;
+    }
+
     setStep((s) => Math.min(s + 1, TOTAL));
   };
 
@@ -76,6 +110,8 @@ const LookerProfileForm = () => {
 
       <div className="glass-card p-8">
         <AnimatePresence mode="wait">
+
+          {/* Step 1 — Account */}
           {step === 1 && (
             <motion.div key="s1" {...slide} className="space-y-6">
               <div>
@@ -96,15 +132,53 @@ const LookerProfileForm = () => {
                   <Input type="password" value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="••••••••" />
                 </div>
               </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </motion.div>
           )}
 
+          {/* Step 2 — Experience */}
           {step === 2 && (
-            <motion.div key="s2" {...slide}>
-              <ResumeUpload file={form.resume} onChange={(f) => update("resume", f)} />
+            <motion.div key="s2" {...slide} className="space-y-4">
+              {/* Parsing spinner */}
+              {parsing && (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-6 h-6 rounded-full border-2 border-border border-t-accent animate-spin" />
+                  <p className="text-sm text-muted-foreground">Parsing your resume with AI…</p>
+                </div>
+              )}
+
+              {/* File upload — shown before parsing and after a failed parse */}
+              {!parsing && form.positions.length === 0 && (
+                <>
+                  <ResumeUpload file={form.resume} onChange={handleFileSelect} />
+                  {parseError && (
+                    <p className="text-sm text-destructive">{parseError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline w-full text-center"
+                  >
+                    Skip for now
+                  </button>
+                </>
+              )}
+
+              {/* Parsed results — shown after successful parse */}
+              {!parsing && form.positions.length > 0 && (
+                <ExperienceCard
+                  resumeFile={form.resume}
+                  onResumeChange={handleFileSelect}
+                  positions={form.positions}
+                  setPositions={(p) => update("positions", p)}
+                  education={form.education}
+                  setEducation={(e) => update("education", e)}
+                />
+              )}
             </motion.div>
           )}
 
+          {/* Step 3 — Preferences */}
           {step === 3 && (
             <motion.div key="s3" {...slide} className="space-y-6">
               <div>
@@ -144,6 +218,7 @@ const LookerProfileForm = () => {
             </motion.div>
           )}
 
+          {/* Step 4 — Visibility */}
           {step === 4 && (
             <motion.div key="s4" {...slide} className="space-y-6">
               <div>
@@ -165,19 +240,30 @@ const LookerProfileForm = () => {
                   </p>
                 </div>
               </div>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
             </motion.div>
           )}
+
         </AnimatePresence>
 
         <div className="flex justify-between mt-8 pt-6 border-t border-border/50">
-          <Button variant="ghost" onClick={back} disabled={step === 1 || submitting} className="gap-1.5 text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            onClick={back}
+            disabled={step === 1 || submitting || parsing}
+            className="gap-1.5 text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
-          <Button onClick={next} disabled={submitting} className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90">
-            {submitting ? "Creating account…" : step === TOTAL ? "Complete" : "Continue"}
+          <Button
+            onClick={next}
+            disabled={submitting || parsing}
+            className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            {submitting
+              ? "Creating account…"
+              : step === TOTAL
+              ? "Go to dashboard"
+              : "Continue"}
             {!submitting && <ArrowRight className="w-4 h-4" />}
           </Button>
         </div>

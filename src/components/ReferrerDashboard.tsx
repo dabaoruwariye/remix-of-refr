@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { ArrowRight, ArrowLeft, Download } from "lucide-react";
 import OnboardingProgress from "./OnboardingProgress";
 import ResumeUpload from "./ResumeUpload";
+import ExperienceCard, { type Position, type Education } from "./shared/ExperienceCard";
 import { useAuth } from "@/context/AuthContext";
+import { uploadResume, parsedToPositions, parsedToEducation } from "@/lib/resume";
 
 const STEPS = ["Account", "Experience", "Extension"];
 const TOTAL = STEPS.length;
@@ -15,33 +17,65 @@ const ReferrerDashboard = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { signup } = useAuth();
+
   const [step, setStep] = useState(1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Resume parsing state
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+
   const [form, setForm] = useState({
     name: "", email: "", password: "",
     resume: null as File | null,
+    positions: [] as Position[],
+    education: [] as Education[],
   });
 
   const update = (field: string, value: unknown) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
+  const handleFileSelect = async (file: File | null) => {
+    update("resume", file);
+    if (!file) return;
+    setParsing(true);
+    setParseError(null);
+    try {
+      const data = await uploadResume(file);
+      update("positions", parsedToPositions(data.work_history));
+      update("education", parsedToEducation(data.education));
+    } catch (err) {
+      setParseError(err instanceof Error ? err.message : "Failed to parse resume. You can fill in your experience manually.");
+    } finally {
+      setParsing(false);
+    }
+  };
+
   const next = async () => {
-    if (step === TOTAL) {
+    setError(null);
+
+    // Step 1 → create account so user is authenticated for step 2+
+    if (step === 1) {
       setSubmitting(true);
-      setError(null);
       try {
         const inviteId = searchParams.get("invite_id") ?? undefined;
         await signup(form.name, form.email, form.password, "referrer", inviteId);
-        navigate("/dashboard");
-      } catch (err: unknown) {
+        setStep(2);
+      } catch (err) {
         setError(err instanceof Error ? err.message : "Signup failed. Please try again.");
       } finally {
         setSubmitting(false);
       }
       return;
     }
+
+    // Last step → navigate to dashboard
+    if (step === TOTAL) {
+      navigate("/dashboard");
+      return;
+    }
+
     setStep((s) => Math.min(s + 1, TOTAL));
   };
 
@@ -60,6 +94,8 @@ const ReferrerDashboard = () => {
 
       <div className="glass-card p-8">
         <AnimatePresence mode="wait">
+
+          {/* Step 1 — Account */}
           {step === 1 && (
             <motion.div key="r1" {...slide} className="space-y-6">
               <div>
@@ -80,21 +116,54 @@ const ReferrerDashboard = () => {
                   <Input type="password" value={form.password} onChange={(e) => update("password", e.target.value)} placeholder="••••••••" />
                 </div>
               </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </motion.div>
           )}
 
+          {/* Step 2 — Experience */}
           {step === 2 && (
-            <motion.div key="r2" {...slide}>
-              <ResumeUpload file={form.resume} onChange={(f) => update("resume", f)} />
+            <motion.div key="r2" {...slide} className="space-y-4">
+              {parsing && (
+                <div className="flex flex-col items-center justify-center py-12 gap-4">
+                  <div className="w-6 h-6 rounded-full border-2 border-border border-t-accent animate-spin" />
+                  <p className="text-sm text-muted-foreground">Parsing your resume with AI…</p>
+                </div>
+              )}
+
+              {!parsing && form.positions.length === 0 && (
+                <>
+                  <ResumeUpload file={form.resume} onChange={handleFileSelect} />
+                  {parseError && (
+                    <p className="text-sm text-destructive">{parseError}</p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setStep(3)}
+                    className="text-xs text-muted-foreground hover:text-foreground underline-offset-2 hover:underline w-full text-center"
+                  >
+                    Skip for now
+                  </button>
+                </>
+              )}
+
+              {!parsing && form.positions.length > 0 && (
+                <ExperienceCard
+                  resumeFile={form.resume}
+                  onResumeChange={handleFileSelect}
+                  positions={form.positions}
+                  setPositions={(p) => update("positions", p)}
+                  education={form.education}
+                  setEducation={(e) => update("education", e)}
+                />
+              )}
             </motion.div>
           )}
 
+          {/* Step 3 — Extension */}
           {step === 3 && (
             <motion.div key="r3" {...slide} className="space-y-6">
               <div>
-                <h2 className="text-2xl font-semibold text-foreground mb-1">
-                  One last step.
-                </h2>
+                <h2 className="text-2xl font-semibold text-foreground mb-1">One last step.</h2>
                 <p className="text-lg text-muted-foreground font-light mb-2">
                   This is where the magic happens.
                 </p>
@@ -114,19 +183,30 @@ const ReferrerDashboard = () => {
               <p className="text-[11px] text-muted-foreground text-center tracking-wide">
                 Works with Chrome, Edge, Brave, and Arc.
               </p>
-              {error && (
-                <p className="text-sm text-destructive">{error}</p>
-              )}
             </motion.div>
           )}
+
         </AnimatePresence>
 
         <div className="flex justify-between mt-8 pt-6 border-t border-border/50">
-          <Button variant="ghost" onClick={back} disabled={step === 1 || submitting} className="gap-1.5 text-muted-foreground hover:text-foreground">
+          <Button
+            variant="ghost"
+            onClick={back}
+            disabled={step === 1 || submitting || parsing}
+            className="gap-1.5 text-muted-foreground hover:text-foreground"
+          >
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
-          <Button onClick={next} disabled={submitting} className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90">
-            {submitting ? "Creating account…" : step === TOTAL ? "Complete" : "Continue"}
+          <Button
+            onClick={next}
+            disabled={submitting || parsing}
+            className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90"
+          >
+            {submitting
+              ? "Creating account…"
+              : step === TOTAL
+              ? "Go to dashboard"
+              : "Continue"}
             {!submitting && <ArrowRight className="w-4 h-4" />}
           </Button>
         </div>

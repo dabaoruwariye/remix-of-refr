@@ -6,6 +6,7 @@ import NetworkTab from "@/components/referrer/NetworkTab";
 import ReferralsTab from "@/components/referrer/ReferralsTab";
 import EarningsTab from "@/components/referrer/EarningsTab";
 import ProfileTab from "@/components/referrer/ProfileTab";
+import { useAuth } from "@/context/AuthContext";
 
 const TABS = [
   { id: "referrals", label: "Referrals", icon: Send },
@@ -19,6 +20,7 @@ type TabId = (typeof TABS)[number]["id"];
 const ReferrerHub = () => {
   const [activeTab, setActiveTab] = useState<TabId>("referrals");
   const navigate = useNavigate();
+  const { logout } = useAuth();
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -51,7 +53,7 @@ const ReferrerHub = () => {
             })}
           </div>
           <button
-            onClick={() => navigate("/login")}
+            onClick={() => logout().then(() => navigate("/login"))}
             className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             Log out

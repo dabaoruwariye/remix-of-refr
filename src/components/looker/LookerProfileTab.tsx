@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -6,35 +6,82 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Pencil, Check } from "lucide-react";
-import ExperienceCard, { Position, Education } from "@/components/shared/ExperienceCard";
+import ExperienceCard, { type Position, type Education } from "@/components/shared/ExperienceCard";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { INDUSTRIES, SENIORITY } from "@/lib/refrConstants";
-
-const INITIAL_POSITIONS: Position[] = [
-  { id: "p1", company: "Stripe", title: "Senior Product Manager", startDate: "May 2021", endDate: "Present", description: "Led the Billing v3 platform from concept to GA, scaling to $2B in processed payments." },
-  { id: "p2", company: "Square", title: "Product Manager", startDate: "Jun 2018", endDate: "Apr 2021", description: "Owned merchant onboarding flows that lifted activation by 22%." },
-];
-const INITIAL_EDU: Education[] = [
-  { id: "e1", school: "MIT", degree: "B.S.", field: "Computer Science", graduationYear: "2018" },
-];
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const LookerProfileTab = () => {
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
+
   const [visible, setVisible] = useState(true);
-  const [resume, setResume] = useState<File | null>(null);
-  const [positions, setPositions] = useState<Position[]>(INITIAL_POSITIONS);
-  const [education, setEducation] = useState<Education[]>(INITIAL_EDU);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
 
+  const [prefs, setPrefs] = useState({ targetRole: "", seniority: "", industries: [] as string[] });
   const [editingPrefs, setEditingPrefs] = useState(false);
-  const [prefs, setPrefs] = useState({
-    targetRole: "VP of Product",
-    seniority: "lead",
-    industries: ["Technology", "Finance"],
-  });
 
-  const [account, setAccount] = useState({ name: "Jane Smith", email: "jane@example.com" });
+  const [account, setAccount] = useState({ name: "", email: "" });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [draftAccount, setDraftAccount] = useState(account);
   const [draftPassword, setDraftPassword] = useState({ current: "", next: "", confirm: "" });
+
+  useEffect(() => {
+    if (!user) return;
+
+    const load = async () => {
+      setLoading(true);
+
+      const [
+        { data: userRow },
+        { data: profile },
+        { data: workHistory },
+        { data: eduRows },
+      ] = await Promise.all([
+        supabase.from("users").select("name, email").eq("id", user.id).single(),
+        supabase.from("looker_profiles").select("target_role, seniority, industries, visible").eq("user_id", user.id).single(),
+        supabase.from("work_history").select("id, company_name, job_title, start_date, end_date, description").eq("user_id", user.id),
+        supabase.from("education").select("id, school_name, degree_type, field_of_study, graduation_year").eq("user_id", user.id),
+      ]);
+
+      if (userRow) {
+        setAccount({ name: userRow.name ?? "", email: userRow.email ?? "" });
+      }
+      if (profile) {
+        setPrefs({
+          targetRole: profile.target_role ?? "",
+          seniority: profile.seniority ?? "",
+          industries: profile.industries ?? [],
+        });
+        setVisible(profile.visible ?? true);
+      }
+      if (workHistory) {
+        setPositions(workHistory.map((r) => ({
+          id: r.id,
+          company: r.company_name ?? "",
+          title: r.job_title ?? "",
+          startDate: r.start_date ?? "",
+          endDate: r.end_date ?? "Present",
+          description: r.description ?? "",
+        })));
+      }
+      if (eduRows) {
+        setEducation(eduRows.map((r) => ({
+          id: r.id,
+          school: r.school_name ?? "",
+          degree: r.degree_type ?? "",
+          field: r.field_of_study ?? "",
+          graduationYear: r.graduation_year ?? "",
+        })));
+      }
+
+      setLoading(false);
+    };
+
+    load();
+  }, [user?.id]);
 
   const openSettings = () => {
     setDraftAccount(account);
@@ -48,12 +95,20 @@ const LookerProfileTab = () => {
   };
 
   const completion = (() => {
-    let total = 3, done = 0;
-    if (resume) done++;
+    let done = 0;
+    if (positions.length > 0) done++;
     if (prefs.industries.length > 0) done++;
     if (prefs.targetRole.trim()) done++;
-    return Math.round((done / total) * 100);
+    return Math.round((done / 3) * 100);
   })();
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="w-5 h-5 rounded-full border-2 border-border border-t-foreground animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -71,8 +126,8 @@ const LookerProfileTab = () => {
       {/* Account */}
       <div className="glass-card p-6">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Account</h3>
-        <p className="text-base font-semibold text-foreground">{account.name}</p>
-        <p className="text-sm text-muted-foreground">{account.email}</p>
+        <p className="text-base font-semibold text-foreground">{account.name || "—"}</p>
+        <p className="text-sm text-muted-foreground">{account.email || "—"}</p>
         <button onClick={openSettings} className="text-xs text-accent hover:underline mt-2">Update in settings</button>
       </div>
 
@@ -107,8 +162,8 @@ const LookerProfileTab = () => {
 
       {/* Experience */}
       <ExperienceCard
-        resumeFile={resume}
-        onResumeChange={setResume}
+        resumeFile={null}
+        onResumeChange={() => {}}
         positions={positions}
         setPositions={setPositions}
         education={education}

@@ -1,41 +1,87 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import { Pencil, Check, Download, Chrome } from "lucide-react";
-import ExperienceCard, { Position, Education } from "@/components/shared/ExperienceCard";
-import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { Badge } from "@/components/ui/badge";
+import { Pencil, Check, Download, Chrome } from "lucide-react";
+import ExperienceCard, { type Position, type Education } from "@/components/shared/ExperienceCard";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
 import { INDUSTRIES } from "@/lib/refrConstants";
-
-const INITIAL_POS: Position[] = [
-  { id: "p1", company: "Datadog", title: "Director of Engineering", startDate: "Aug 2022", endDate: "Present", description: "Leading the platform infrastructure org of 60 engineers." },
-  { id: "p2", company: "Stripe", title: "Engineering Manager", startDate: "Mar 2018", endDate: "Jul 2022", description: "Built and ran the Billing platform team." },
-];
-const INITIAL_EDU: Education[] = [
-  { id: "e1", school: "Stanford", degree: "M.S.", field: "Computer Science", graduationYear: "2014" },
-];
+import { useAuth } from "@/context/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const ProfileTab = () => {
-  const [resume, setResume] = useState<File | null>(null);
-  const [positions, setPositions] = useState<Position[]>(INITIAL_POS);
-  const [education, setEducation] = useState<Education[]>(INITIAL_EDU);
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(true);
 
-  const [industries, setIndustries] = useState<string[]>(["Technology", "Finance"]);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [education, setEducation] = useState<Education[]>([]);
+  const [industries, setIndustries] = useState<string[]>([]);
   const [editingIndustries, setEditingIndustries] = useState(false);
-
-  const [networkDesc, setNetworkDesc] = useState(
-    "Mostly operators and PMs from early stage startups, plus engineers I worked with at Stripe and Datadog.",
-  );
+  const [networkDesc, setNetworkDesc] = useState("");
   const [editingNetwork, setEditingNetwork] = useState(false);
 
   const extensionInstalled = false;
+
+  useEffect(() => {
+    if (!user) return;
+
+    const load = async () => {
+      setLoading(true);
+
+      const [
+        { data: profile },
+        { data: workHistory },
+        { data: eduRows },
+      ] = await Promise.all([
+        supabase.from("referrer_profiles").select("industries, network_description").eq("user_id", user.id).single(),
+        supabase.from("work_history").select("id, company_name, job_title, start_date, end_date, description").eq("user_id", user.id),
+        supabase.from("education").select("id, school_name, degree_type, field_of_study, graduation_year").eq("user_id", user.id),
+      ]);
+
+      if (profile) {
+        setIndustries(profile.industries ?? []);
+        setNetworkDesc(profile.network_description ?? "");
+      }
+      if (workHistory) {
+        setPositions(workHistory.map((r) => ({
+          id: r.id,
+          company: r.company_name ?? "",
+          title: r.job_title ?? "",
+          startDate: r.start_date ?? "",
+          endDate: r.end_date ?? "Present",
+          description: r.description ?? "",
+        })));
+      }
+      if (eduRows) {
+        setEducation(eduRows.map((r) => ({
+          id: r.id,
+          school: r.school_name ?? "",
+          degree: r.degree_type ?? "",
+          field: r.field_of_study ?? "",
+          graduationYear: r.graduation_year ?? "",
+        })));
+      }
+
+      setLoading(false);
+    };
+
+    load();
+  }, [user?.id]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-24">
+        <div className="w-5 h-5 rounded-full border-2 border-border border-t-foreground animate-spin" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
       {/* Experience */}
       <ExperienceCard
-        resumeFile={resume}
-        onResumeChange={setResume}
+        resumeFile={null}
+        onResumeChange={() => {}}
         positions={positions}
         setPositions={setPositions}
         education={education}
@@ -51,7 +97,9 @@ const ProfileTab = () => {
             <p className="text-xs text-muted-foreground mt-1">Used to surface relevant opportunities through the extension.</p>
           </div>
           <button onClick={() => setEditingIndustries((v) => !v)} className="p-1.5 rounded-lg hover:bg-muted">
-            {editingIndustries ? <Check className="w-4 h-4 text-success" /> : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
+            {editingIndustries
+              ? <Check className="w-4 h-4 text-success" />
+              : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
           </button>
         </div>
         {editingIndustries ? (
@@ -77,7 +125,9 @@ const ProfileTab = () => {
             <p className="text-xs text-muted-foreground mt-1">How would you describe the people in your network?</p>
           </div>
           <button onClick={() => setEditingNetwork((v) => !v)} className="p-1.5 rounded-lg hover:bg-muted">
-            {editingNetwork ? <Check className="w-4 h-4 text-success" /> : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
+            {editingNetwork
+              ? <Check className="w-4 h-4 text-success" />
+              : <Pencil className="w-3.5 h-3.5 text-muted-foreground" />}
           </button>
         </div>
         {editingNetwork ? (
@@ -111,7 +161,11 @@ const ProfileTab = () => {
               </div>
             </div>
           </div>
-          <Button size="sm" variant={extensionInstalled ? "outline" : "default"} className={`rounded-full text-xs gap-1.5 ${!extensionInstalled ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}`}>
+          <Button
+            size="sm"
+            variant={extensionInstalled ? "outline" : "default"}
+            className={`rounded-full text-xs gap-1.5 ${!extensionInstalled ? "bg-accent text-accent-foreground hover:bg-accent/90" : ""}`}
+          >
             <Download className="w-3.5 h-3.5" /> {extensionInstalled ? "Reinstall" : "Download"}
           </Button>
         </div>
