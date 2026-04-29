@@ -45,6 +45,7 @@ const ExperienceCard = ({
   const inputRef = useRef<HTMLInputElement>(null);
   const [editingPos, setEditingPos] = useState<string | null>(null);
   const [editingEdu, setEditingEdu] = useState<string | null>(null);
+  const [showResume, setShowResume] = useState(false);
 
   const handleFile = (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -65,13 +66,27 @@ const ExperienceCard = ({
     <div className="glass-card p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Experience</h3>
+        {resumeFile ? (
+          <button
+            onClick={() => setShowResume((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <FileText className="w-3 h-3" />
+            <span className="truncate max-w-[160px]">{resumeFile.name}</span>
+          </button>
+        ) : (
+          <button
+            onClick={() => inputRef.current?.click()}
+            className="inline-flex items-center gap-1.5 text-[11px] text-accent hover:underline"
+          >
+            <Upload className="w-3 h-3" /> Upload resume
+          </button>
+        )}
       </div>
-
-      {/* Resume slot */}
-      {resumeFile ? (
-        <div className="flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/30">
+      {resumeFile && showResume && (
+        <div className="flex items-center justify-between p-3 rounded-xl border border-border/60 bg-muted/30 -mt-3">
           <div className="flex items-center gap-3 min-w-0">
-            <div className="w-9 h-9 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-accent/10 text-accent flex items-center justify-center shrink-0">
               <FileText className="w-4 h-4" />
             </div>
             <div className="min-w-0">
@@ -83,19 +98,6 @@ const ExperienceCard = ({
             Replace
           </Button>
         </div>
-      ) : (
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          className="w-full flex flex-col items-center justify-center gap-2 h-28 rounded-xl border-2 border-dashed border-border/70 text-muted-foreground hover:text-foreground hover:border-border transition-all"
-        >
-          <Upload className="w-5 h-5" />
-          <p className="text-sm font-medium">Upload your resume to auto-fill</p>
-          <p className="text-[11px] text-muted-foreground">PDF or Word</p>
-        </button>
-      )}
-      {resumeFile && (
-        <p className="text-xs text-muted-foreground -mt-3">{resumeNote}</p>
       )}
       <input
         ref={inputRef}

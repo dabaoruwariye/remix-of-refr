@@ -30,11 +30,37 @@ interface NetworkSectionProps {
 
 const NetworkSection = ({
   uploadHeadline, uploadSubheadline, emptyText,
-  alreadyOnRefr, notOnRefr, connectButtonLabel, sentInvites,
+  alreadyOnRefr, notOnRefr, connectButtonLabel, sentInvites: initialInvites,
 }: NetworkSectionProps) => {
   const [csvFile, setCsvFile] = useState<File | null>(null);
   const [inviteName, setInviteName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [sentInvites, setSentInvites] = useState<SentInvite[]>(initialInvites);
+
+  const formatToday = () =>
+    new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+
+  const addInvite = (name: string, email: string) => {
+    if (!name.trim() || !email.trim()) return;
+    setSentInvites((prev) => [
+      { id: crypto.randomUUID(), name: name.trim(), email: email.trim(), date: formatToday(), status: "Invited" },
+      ...prev,
+    ]);
+  };
+
+  const handleInvitePerson = (person: NetworkPerson) => {
+    if (sentInvites.some((i) => i.name === person.name)) return;
+    setSentInvites((prev) => [
+      { id: crypto.randomUUID(), name: person.name, email: person.detail || "—", date: formatToday(), status: "Invited" },
+      ...prev,
+    ]);
+  };
+
+  const handleManualInvite = () => {
+    addInvite(inviteName, inviteEmail);
+    setInviteName("");
+    setInviteEmail("");
+  };
 
   const hasUpload = csvFile !== null;
 
@@ -94,8 +120,14 @@ const NetworkSection = ({
                     </div>
                     <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="rounded-full text-xs shrink-0">
-                    Send Invite
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleInvitePerson(p)}
+                    disabled={sentInvites.some((i) => i.name === p.name)}
+                    className="rounded-full text-xs shrink-0"
+                  >
+                    {sentInvites.some((i) => i.name === p.name) ? "Invited" : "Send Invite"}
                   </Button>
                 </div>
               ))}
@@ -142,7 +174,11 @@ const NetworkSection = ({
         <div className="flex gap-2">
           <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Their name" className="flex-1" />
           <Input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Their email" className="flex-1" />
-          <Button className="gap-2 rounded-full px-5 bg-accent text-accent-foreground hover:bg-accent/90 shrink-0">
+          <Button
+            onClick={handleManualInvite}
+            disabled={!inviteName.trim() || !inviteEmail.trim()}
+            className="gap-2 rounded-full px-5 bg-accent text-accent-foreground hover:bg-accent/90 shrink-0"
+          >
             <Send className="w-4 h-4" /> Send Invite
           </Button>
         </div>

@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Pencil, Check } from "lucide-react";
 import ExperienceCard, { Position, Education } from "@/components/shared/ExperienceCard";
 import MultiSelectDropdown from "@/components/MultiSelectDropdown";
@@ -30,6 +31,22 @@ const LookerProfileTab = () => {
     industries: ["Technology", "Finance"],
   });
 
+  const [account, setAccount] = useState({ name: "Jane Smith", email: "jane@example.com" });
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [draftAccount, setDraftAccount] = useState(account);
+  const [draftPassword, setDraftPassword] = useState({ current: "", next: "", confirm: "" });
+
+  const openSettings = () => {
+    setDraftAccount(account);
+    setDraftPassword({ current: "", next: "", confirm: "" });
+    setSettingsOpen(true);
+  };
+
+  const saveSettings = () => {
+    setAccount(draftAccount);
+    setSettingsOpen(false);
+  };
+
   const completion = (() => {
     let total = 3, done = 0;
     if (resume) done++;
@@ -54,10 +71,39 @@ const LookerProfileTab = () => {
       {/* Account */}
       <div className="glass-card p-6">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-3">Account</h3>
-        <p className="text-base font-semibold text-foreground">Jane Smith</p>
-        <p className="text-sm text-muted-foreground">jane@example.com</p>
-        <button className="text-xs text-accent hover:underline mt-2">Update in settings</button>
+        <p className="text-base font-semibold text-foreground">{account.name}</p>
+        <p className="text-sm text-muted-foreground">{account.email}</p>
+        <button onClick={openSettings} className="text-xs text-accent hover:underline mt-2">Update in settings</button>
       </div>
+
+      <Dialog open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Account settings</DialogTitle>
+            <DialogDescription>Update your name, email, or password.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Name</label>
+              <Input value={draftAccount.name} onChange={(e) => setDraftAccount({ ...draftAccount, name: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Email</label>
+              <Input type="email" value={draftAccount.email} onChange={(e) => setDraftAccount({ ...draftAccount, email: e.target.value })} />
+            </div>
+            <div className="pt-2 border-t border-border/40 space-y-3">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Change password</p>
+              <Input type="password" placeholder="Current password" value={draftPassword.current} onChange={(e) => setDraftPassword({ ...draftPassword, current: e.target.value })} />
+              <Input type="password" placeholder="New password" value={draftPassword.next} onChange={(e) => setDraftPassword({ ...draftPassword, next: e.target.value })} />
+              <Input type="password" placeholder="Confirm new password" value={draftPassword.confirm} onChange={(e) => setDraftPassword({ ...draftPassword, confirm: e.target.value })} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setSettingsOpen(false)}>Cancel</Button>
+            <Button onClick={saveSettings} className="bg-accent text-accent-foreground hover:bg-accent/90">Save changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Experience */}
       <ExperienceCard
