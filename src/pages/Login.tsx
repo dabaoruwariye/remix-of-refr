@@ -3,16 +3,28 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useAuth } from "@/context/AuthContext";
 
 const Login = () => {
   const navigate = useNavigate();
+  const { login } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState<"looker" | "referrer">("looker");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    navigate(role === "looker" ? "/looker-dashboard" : "/dashboard");
+    setSubmitting(true);
+    setError(null);
+    try {
+      const userType = await login(email, password);
+      navigate(userType === "referrer" ? "/dashboard" : "/looker-dashboard");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Login failed. Please check your credentials.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -67,21 +79,11 @@ const Login = () => {
               />
             </div>
 
-            <div className="flex items-center justify-between text-xs">
-              <div className="flex items-center gap-1 rounded-full bg-muted p-1">
-                {(["looker", "referrer"] as const).map((r) => (
-                  <button
-                    type="button"
-                    key={r}
-                    onClick={() => setRole(r)}
-                    className={`px-3 py-1 rounded-full capitalize transition-colors ${
-                      role === r ? "bg-background text-foreground" : "text-muted-foreground"
-                    }`}
-                  >
-                    {r}
-                  </button>
-                ))}
-              </div>
+            {error && (
+              <p className="text-sm text-destructive">{error}</p>
+            )}
+
+            <div className="flex justify-end text-xs">
               <button type="button" className="text-muted-foreground hover:text-foreground">
                 Forgot password?
               </button>
@@ -89,9 +91,10 @@ const Login = () => {
 
             <button
               type="submit"
-              className="w-full h-11 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity"
+              disabled={submitting}
+              className="w-full h-11 rounded-full bg-primary text-primary-foreground text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
             >
-              Log in
+              {submitting ? "Logging in…" : "Log in"}
             </button>
           </form>
 

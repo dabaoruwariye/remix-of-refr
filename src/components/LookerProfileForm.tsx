@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import { ArrowRight, ArrowLeft } from "lucide-react";
 import OnboardingProgress from "./OnboardingProgress";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 import ResumeUpload from "./ResumeUpload";
+import { useAuth } from "@/context/AuthContext";
 
 const INDUSTRIES = [
   "Technology", "Healthcare", "Finance", "Education", "Consumer",
@@ -26,7 +27,11 @@ const TOTAL = STEPS.length;
 
 const LookerProfileForm = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const { signup } = useAuth();
   const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "", email: "", password: "",
@@ -38,13 +43,24 @@ const LookerProfileForm = () => {
   const update = (field: string, value: unknown) =>
     setForm((prev) => ({ ...prev, [field]: value }));
 
-  const next = () => {
+  const next = async () => {
     if (step === TOTAL) {
-      navigate("/looker-dashboard");
+      setSubmitting(true);
+      setError(null);
+      try {
+        const inviteId = searchParams.get("invite_id") ?? undefined;
+        await signup(form.name, form.email, form.password, "looker", inviteId);
+        navigate("/looker-dashboard");
+      } catch (err: unknown) {
+        setError(err instanceof Error ? err.message : "Signup failed. Please try again.");
+      } finally {
+        setSubmitting(false);
+      }
       return;
     }
     setStep((s) => Math.min(s + 1, TOTAL));
   };
+
   const back = () => setStep((s) => Math.max(s - 1, 1));
 
   const slide = {
@@ -149,16 +165,20 @@ const LookerProfileForm = () => {
                   </p>
                 </div>
               </div>
+              {error && (
+                <p className="text-sm text-destructive">{error}</p>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
 
         <div className="flex justify-between mt-8 pt-6 border-t border-border/50">
-          <Button variant="ghost" onClick={back} disabled={step === 1} className="gap-1.5 text-muted-foreground hover:text-foreground">
+          <Button variant="ghost" onClick={back} disabled={step === 1 || submitting} className="gap-1.5 text-muted-foreground hover:text-foreground">
             <ArrowLeft className="w-4 h-4" /> Back
           </Button>
-          <Button onClick={next} className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90">
-            {step === TOTAL ? "Complete" : "Continue"} <ArrowRight className="w-4 h-4" />
+          <Button onClick={next} disabled={submitting} className="gap-1.5 rounded-full px-6 bg-accent text-accent-foreground hover:bg-accent/90">
+            {submitting ? "Creating account…" : step === TOTAL ? "Complete" : "Continue"}
+            {!submitting && <ArrowRight className="w-4 h-4" />}
           </Button>
         </div>
       </div>

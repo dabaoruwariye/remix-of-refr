@@ -8,6 +8,7 @@ import NotFound from "./pages/NotFound.tsx";
 import ReferrerHub from "./pages/ReferrerHub.tsx";
 import LookerHub from "./pages/LookerHub.tsx";
 import Login from "./pages/Login.tsx";
+import ProtectedRoute from "./components/ProtectedRoute.tsx";
 
 const queryClient = new QueryClient();
 
@@ -20,8 +21,8 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
-          <Route path="/dashboard" element={<ReferrerHub />} />
-          <Route path="/looker-dashboard" element={<LookerHub />} />
+          <Route path="/dashboard" element={<ProtectedRoute><ReferrerHub /></ProtectedRoute>} />
+          <Route path="/looker-dashboard" element={<ProtectedRoute><LookerHub /></ProtectedRoute>} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
